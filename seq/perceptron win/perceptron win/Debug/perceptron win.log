@@ -1,0 +1,5 @@
+﻿main.obj : error LNK2019: unresolved external symbol __imp__glClear@4 referenced in function "void __cdecl display(void)" (?display@@YAXXZ)
+main.obj : error LNK2019: unresolved external symbol __imp__glClearColor@16 referenced in function "void __cdecl init(void)" (?init@@YAXXZ)
+main.obj : error LNK2019: unresolved external symbol __imp__glDrawPixels@20 referenced in function "void __cdecl display(void)" (?display@@YAXXZ)
+main.obj : error LNK2019: unresolved external symbol __imp__glOrtho@48 referenced in function "void __cdecl init(void)" (?init@@YAXXZ)
+C:\Users\eg7eg\Desktop\perceptron win\Debug\perceptron win.exe : fatal error LNK1120: 4 unresolved externals
