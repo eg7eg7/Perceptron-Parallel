@@ -2,7 +2,6 @@
 #include "stdafx.h"
 
 #include "Perceptron.h"
-#include "minunit.h"
 
 
 static const char PATH[] = "C:\\Dataset Maker Perceptron\\dataset.txt";

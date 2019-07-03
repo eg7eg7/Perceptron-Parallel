@@ -168,7 +168,7 @@ void zero_W(double* W, int K) {
 void run_perceptron_sequential(int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W) {
 	double val;
 	int fault_flag = FAULT;
-	double alpha, current_q = MAX_QC;
+	double alpha, current_q = MAX_QC, best_q = MAX_QC,best_alpha;
 	int loop;
 	int faulty_point;
 
@@ -177,6 +177,9 @@ void run_perceptron_sequential(int N, int K, double alpha_zero, double alpha_max
 		printf("malloc assignment error");
 		return;
 	}
+	double* min_W;
+	init_W(&min_W, K);
+
 	//alpha=alpha zero  1, alpha=alpha+alpha_zero 9
 	for (alpha = alpha_zero; alpha <= alpha_max; alpha += alpha_zero)
 	{
@@ -204,6 +207,12 @@ void run_perceptron_sequential(int N, int K, double alpha_zero, double alpha_max
 		//6 find q
 		current_q = get_quality(points, W, N, K);
 		//7+8
+		if (current_q < best_q)
+		{
+			copy_vector(min_W, W, K + 1);
+			best_q = current_q;
+			best_alpha = alpha;
+		}
 		if (current_q <= QC)
 			break;
 	}
@@ -215,10 +224,15 @@ void run_perceptron_sequential(int N, int K, double alpha_zero, double alpha_max
 		printf("\tstop reason : desired quality reached. q %f of QC=%f\n", current_q, QC);
 
 	printf("q=%f,alpha=%f\n\nW = [", current_q, alpha);
-
 	for (int i = 0; i < K + 1; i++) {
 		printf("%f ", W[i]);
 	}
 	printf("]\n");
+	printf("Best W is W= [");
+		for (int i = 0; i < K + 1; i++) {
+			printf("%f ", min_W[i]);
+		}
+	printf("] with q=%f,alpha=%f\n",best_q,best_alpha);
 	free(W);
+	free(min_W);
 }

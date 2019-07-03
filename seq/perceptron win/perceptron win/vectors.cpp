@@ -16,3 +16,8 @@ void add_vector_to_vector(double* vector1, double* vector2, int dim, double* res
 	for (int i = 0; i < dim; i++)
 		result_vector[i] = vector1[i] + vector2[i];
 }
+
+void copy_vector(double* target, double* source, int dim) {
+	for (int i = 0; i < dim; i++) 
+		target[i] = source[i];
+}

@@ -157,7 +157,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="minunit.h" />
     <ClInclude Include="Perceptron.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
