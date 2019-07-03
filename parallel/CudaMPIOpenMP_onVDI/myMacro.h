@@ -3,9 +3,6 @@
 #define MACRO_HEADER
 
 
-#define HEAVY 10000
-#define PATH "C:\\numbers.txt"
-
 /*
 The following defines are for debug purposes
 */
@@ -18,7 +15,6 @@ The following defines are for debug purposes
 
 //if reading from file, read a fixed size of numbers (file has to contain at least indicated amount)
 //#define DEBUG_FIXED_SIZE_FILE
-#define FIXED_SIZE 10000
 
 
 //prints array after initializing array - not recommended for large arrays

@@ -8,16 +8,8 @@
 
 
 __device__ double fOnGPU(int i) {
-	int j;
-	double value;
-	double result = 0;
 
-	for (j = 1; j < HEAVY; j++) {
-		value = (i + 1)*(j % 10);
-		result += cos(value);
-	}
-	return cos(result);
-
+	return 1;
 }
 
 
@@ -98,7 +90,7 @@ cudaError_t resultWithCuda(int *array, int arraysize, int *result)
 
 	/***********************************************************************************/
 	//perform f on gpu using number of blocks with 1000 threads
-	fOnGPUKernel << <num_blocks, 1000 >> > (device_results, array_device, arraysize_device);
+	fOnGPUKernel <<<num_blocks, 1000 >>> (device_results, array_device, arraysize_device);
 
 
 	cudaStatus = cudaGetLastError();
@@ -111,7 +103,7 @@ cudaError_t resultWithCuda(int *array, int arraysize, int *result)
 	CHECK_ERRORS(cudaStatus, "CudaMalloc failed", cudaErrorUnknown)
 
 	// save results in 25 threads
-	sumResultsKernel << < 1, 25 >> > (device_results, sum_results, arraysize_device);
+	sumResultsKernel <<< 1, 25 >>> (device_results, sum_results, arraysize_device);
 	cudaStatus = cudaDeviceSynchronize();
 	CHECK_ERRORS(cudaStatus, "Cuda Sync launch failed", cudaErrorUnknown)
 
@@ -120,7 +112,7 @@ cudaError_t resultWithCuda(int *array, int arraysize, int *result)
 
 
 	// get final result of calculations to sum_results
-	sumAllKernel << < 1, 1 >> > (sum_results);
+	sumAllKernel <<< 1, 1 >>> (sum_results);
 
 
 	// Check for any errors launching the kernel
