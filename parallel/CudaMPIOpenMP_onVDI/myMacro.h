@@ -2,25 +2,16 @@
 #ifndef MACRO_HEADER
 #define MACRO_HEADER
 
+#define MASTER 0
 
-/*
-The following defines are for debug purposes
-*/
+#define START_TAG 0
+#define FINISH_TAG 1
+#define Q_REACHED_TAG 2
+#define Q_NOT_REACHED_TAG 3
 
-//generates Random numbers without using file
-//#define DEBUG_GENERATE_RANDOM
-
-//if using random numbers, uses fixed size of 1000 numbers
-//#define DEBUG_RAND_FIXED_SIZE
-
-//if reading from file, read a fixed size of numbers (file has to contain at least indicated amount)
-//#define DEBUG_FIXED_SIZE_FILE
+#define ALPHA_NOT_FOUND 0
+#define ALPHA_FOUND 1
 
 
-//prints array after initializing array - not recommended for large arrays
-//#define DEBUG_PRINT_ARRAY
-
-//verbal prints
-//#define DEBUG_VERB_PRINT 
-
+#define BUFFER_SIZE 1000
 #endif // !MACRO_HEADER

@@ -30,7 +30,7 @@ void fileReadFailure(char* error) {
 	fileReadFailure();
 }
 void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array) {
-
+	//MPI_Status status;
 	const int line_size = 1000;
 	char delim[] = " ";
 	char* line;
@@ -39,7 +39,7 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	if (rank == MASTER)
 	{
 		line = (char*)malloc(line_size);
-		file = fopen(path, "r");
+		fopen_s(&file, path, "r");
 		if (file == NULL)
 			fileReadFailure("Could not find or open file.\n");
 		//reading first line of the dataset file
@@ -89,6 +89,8 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 
 		}
 	}
+
+
 	MPI_Bcast(N, 1, MPI_INT, MASTER, comm);
 	MPI_Bcast(K, 1, MPI_INT, MASTER, comm);
 	MPI_Bcast(alpha_zero, 1, MPI_DOUBLE, MASTER, comm);
@@ -96,7 +98,10 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	MPI_Bcast(LIMIT, 1, MPI_INT, MASTER, comm);
 	MPI_Bcast(QC, 1, MPI_DOUBLE, MASTER, comm);
 	initPointArray(point_array, *N, *K);
+
+	//if (rank == 1) { MPI_Finalize(); }
 	int set;
+
 	for (int i = 0; i < (*N); i++)
 	{
 		if (rank == MASTER) {
@@ -104,27 +109,29 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 				if (line == NULL)
 					fileReadFailure("line is NULL");
 			token = strtok(line, delim);
+
+			for (int j = 0; j < (*K) && token != NULL; j++)
+			{
+				isDouble(token, &(((*point_array)[i]).x[j]));
+				token = strtok(NULL, delim);
+			}
+			((*point_array)[i]).x[*K] = 1;
+			isInteger(token, &set);
+			if (set == SET_A)
+				(*point_array)[i].set = SET_A;
+			else
+				(*point_array)[i].set = SET_B;
 		}
-		for (int j = 0; j < (*K) && token != NULL; j++)
-		{
-			isDouble(token, &(((*point_array)[i]).x[j]));
-			token = strtok(NULL, delim);
-		}
-		((*point_array)[i]).x[*K] = 1;
-		isInteger(token, &set);
-		if (set == SET_A)
-			(*point_array)[i].set = SET_A;
-		else
-			(*point_array)[i].set = SET_B;
 		MPI_Bcast((*point_array)[i].x, (*K) + 1, MPI_DOUBLE, MASTER, comm);
 		MPI_Bcast(&(*point_array)[i].set, 1, MPI_INT, MASTER, comm);
 	}
+
 	if (rank == MASTER)
 	{
 		free(line);
 		fclose(file);
 	}
-		
+
 }
 
 double f(double* x, double* W, int dim) {
@@ -140,8 +147,12 @@ int init_W(double** W, int K) {
 }
 
 void initPointArray(Point** points, int N, int K) {
+	if (N <= 0 || K <= 0)
+	{
+		printf("invalid parameters N=%d and K=%d\n", N, K);
+		return;
+	}
 	*points = (Point*)malloc(sizeof(Point)*(N));
-
 #pragma omp parallel for
 	for (int i = 0; i < N; i++)
 	{
@@ -196,19 +207,21 @@ void zero_W(double* W, int K) {
 	for (int i = 0; i <= K; i++)
 		W[i] = 0.0;
 }
-void run_perceptron_sequential(int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W) {
+void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W) {
+	double t1, t2;
+	t1 = omp_get_wtime();
 	double val;
 	int fault_flag = FAULT;
 	double alpha, current_q = MAX_QC, best_q = MAX_QC, best_alpha;
 	int loop;
 	int faulty_point;
-
+	double* min_W;
 	if (!init_W(&W, K))
 	{
 		printf("malloc assignment error");
 		return;
 	}
-	double* min_W;
+
 	init_W(&min_W, K);
 
 	//alpha=alpha zero  1, alpha=alpha+alpha_zero 9
@@ -247,8 +260,6 @@ void run_perceptron_sequential(int N, int K, double alpha_zero, double alpha_max
 		if (current_q <= QC)
 			break;
 	}
-
-	printf("finished sequential.\n");
 	if (alpha > alpha_max)
 		printf("\tstop reason : alpha value exceeded. alpha max %f\n", alpha_max);
 	if (current_q < QC)
@@ -266,4 +277,81 @@ void run_perceptron_sequential(int N, int K, double alpha_zero, double alpha_max
 	printf("] with q=%f,alpha=%f\n", best_q, best_alpha);
 	free(W);
 	free(min_W);
+	t2 = omp_get_wtime();
+	printf("Perceptron sequential time is %f\n", t2 - t1);
+	printPerceptronOutput(output_path, W, K, alpha, current_q, QC);
+}
+void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC) {
+	FILE* file;
+	fopen_s(&file, path, "rw");
+	if (q > QC)
+		fprintf(file, "Alpha is not found");
+	else
+	{
+		fprintf(file, "Alpha minimum = %f q=%f\n", alpha, q);
+		for (int i = 0; i <= K; i++)
+			fprintf(file, "%f\n", W[i]);
+
+	}
+
+	fclose(file);
+}
+
+void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W)
+{
+	int alpha_found = ALPHA_NOT_FOUND;
+	int position;
+	MPI_Status* status;
+	char buffer[BUFFER_SIZE];
+	init_W(&W, K);
+	double alpha;
+	if (rank == MASTER) {
+		double min_q = MAX_QC;
+		alpha = alpha_zero;
+		int num_workers = 0;
+#pragma omp parallel for
+		//TODO pragma ordered?
+		for (int i = 1, alpha = alpha_zero; i < world_size; i++, alpha += alpha_zero)
+		{
+			if (alpha <= alpha_max) {
+				MPI_Send(&alpha, 1, MPI_DOUBLE, i, START_TAG, comm);
+#pragma omp atomic
+				{
+					num_workers++;
+				}
+			}
+
+		}
+		while (num_workers > 0)
+		{
+
+			MPI_Recv(buffer, BUFFER_SIZE, MPI_PACKED, MPI_ANY_SOURCE, MPI_ANY_TAG, comm, status);
+			num_workers--;
+			//unpack and get alpha
+			if ((*status).MPI_TAG == Q_REACHED_TAG)
+			{
+				//unpack and check if its the lowest alpha sent
+				//pack should contain alpha, q,W
+				//update alpha in database that its found
+			}
+			else if ((*status).MPI_TAG == Q_NOT_REACHED_TAG) {
+				//update alpha in database that its not found
+			}
+			//set
+			
+			if (alpha <= alpha_max && alpha_found == ALPHA_NOT_FOUND)
+			{
+				MPI_Send(&alpha, 1, MPI_DOUBLE, (*status).MPI_SOURCE, START_TAG, comm);
+				num_workers++;
+				alpha += alpha_zero;
+			}
+		}
+		//send to hosts finish tag
+		printPerceptronOutput(output_path, W, K, alpha, min_q, QC);
+	}
+	else
+	{
+
+	}
+		free(W);
 }

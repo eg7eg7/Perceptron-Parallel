@@ -7,8 +7,8 @@
   kernel.cu
   vectors.cpp
   Perceptron.cpp
+c:\users\cudauser\desktop\parallel\cudampiopenmp_onvdi\perceptron.cpp(302): warning C4101: 'status': unreferenced local variable
   main.cpp
-c:\users\cudauser\desktop\parallel\cudampiopenmp_onvdi\main.cpp(16): warning C4101: 'status': unreferenced local variable
   Generating Code...
   CudaMPIOpenMP_onVDI.vcxproj -> C:\Users\cudauser\Desktop\parallel\x64\Debug\CudaMPIOpenMP_onVDI.exe
   CudaMPIOpenMP_onVDI.vcxproj -> C:\Users\cudauser\Desktop\parallel\x64\Debug\CudaMPIOpenMP_onVDI.pdb (Full PDB)
