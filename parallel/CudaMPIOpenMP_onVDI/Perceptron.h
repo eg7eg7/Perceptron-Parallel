@@ -8,13 +8,15 @@
 #include <string.h>
 #include "myMacro.h"
 #include <omp.h>
+#include <math.h>
 #define SET_A 1
 #define SET_B -1
 #define MAX_QC 1
 #define NO_FAULT 0
 #define FAULT 1
+#define Q_NOT_CHECKED -1
 
-
+#define PRINT
 /*
 x - array of data for each dimension
 set - point belonging to SET A or SET B
@@ -24,11 +26,21 @@ typedef struct struct_point {
 	double* x;
 } Point;
 
+typedef struct struct_alpha {
+	double value;
+	double* W;
+	double q;
+} Alpha;
+
+
 void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array);
 /*
 vector multiplication, W and x are one dimension higher than K
 for multiplication Point.x[dim]=1
 */
+void free_alpha_array();
+void init_alpha_array(double alpha_max, double alpha_zero, int dim);
+int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, double* W, int dim);
 double f(double* x, double* W, int dim);
 double get_quality(Point* points, double* W, int N, int K);
 int init_W(double** W, int K);
@@ -43,5 +55,9 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size,M
 int sign(double a);
 void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC);
 //add mallocAdjustment for easier freeing later
+
+//dummy???
+double get_quality_with_alpha(Point* points, double alpha, double* W, int N, int K, int LIMIT);
+
 
 #endif // !PERCEPTRON

@@ -19,6 +19,7 @@ int main(int argc, char *argv[])
 	Point* points = 0;
 	
 	Perceptron_readDataset(INPUT_PATH, rank, MPI_COMM_WORLD,&N, &K, &alpha_zero, &alpha_max, &LIMIT, &QC, &points);
+	//printPointArray(points, N, K,rank);
 	if (size < 2)
 	{
 		printf("N=%d K=%d alpha zero = %f alpha_max = %f LIMIT=%d QC = %f\n", N, K, alpha_zero, alpha_max, LIMIT, QC);
@@ -33,7 +34,7 @@ int main(int argc, char *argv[])
 
 		
 	
-	//printPointArray(points, N, K,rank);
+	
 	
 	
 	freePointArray(&points, N);
