@@ -38,6 +38,7 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 vector multiplication, W and x are one dimension higher than K
 for multiplication Point.x[dim]=1
 */
+void print_arr(double* W, int dim);
 void free_alpha_array();
 void init_alpha_array(double alpha_max, double alpha_zero, int dim);
 int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, double* W, int dim);

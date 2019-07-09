@@ -155,7 +155,7 @@ void initPointArray(Point** points, int N, int K) {
 		return;
 	}
 	*points = (Point*)malloc(sizeof(Point)*(N));
-//#pragma omp parallel for
+#pragma omp parallel for
 	for (int i = 0; i < N; i++)
 	{
 		(*points)[i].x = (double*)malloc(sizeof(double)*(K + 1));
@@ -163,7 +163,7 @@ void initPointArray(Point** points, int N, int K) {
 }
 
 void freePointArray(Point** points, int size) {
-//#pragma omp parallel for
+#pragma omp parallel for
 	for (int i = 0; i < size; i++)
 	{
 		free((*points)[i].x);
@@ -182,14 +182,15 @@ void printPointArray(Point* points, int size, int dim, int rank) {
 
 double get_quality(Point* points, double* W, int N, int K) {
 	int N_mis = 0;
+#pragma omp parallel for
 	for (int i = 0; i < N; i++) {
 		double val = f(points[i].x, W, K);
 		if (sign(val) != points[i].set)
 		{
-//#pragma omp critical
-			//{
+#pragma omp critical
+			{
 				N_mis++;
-			//}
+			}
 			
 		}
 	}
@@ -238,7 +239,7 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 		//2
 		zero_W(W, K);
 		//5 - loop through 3 and 4 til all points are properly classified or limit reached
-		for (loop = 1; loop < LIMIT && fault_flag == FAULT; loop++)
+		for (loop = 0; loop < LIMIT && fault_flag == FAULT; loop++)
 		{
 			fault_flag = NO_FAULT;
 			//3
@@ -298,8 +299,7 @@ void printPerceptronOutput(const char* path, double* W, int K, double alpha, dou
 	else
 	{
 		printf("Alpha minimum = %f q=%f\n", alpha, q);
-		for (int i = 0; i <= K; i++)
-			printf("%f\n", W[i]);
+		print_arr(W, K + 1);
 
 	}
 #else 
@@ -321,7 +321,7 @@ void printPerceptronOutput(const char* path, double* W, int K, double alpha, dou
 
 }
 void free_alpha_array() {
-//#pragma omp parallel for
+#pragma omp parallel for
 	for (int i = 0; i < alpha_array_size; i++)
 		free(alpha_array[i].W);
 	free(alpha_array);
@@ -331,7 +331,7 @@ void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 
 	alpha_array = (Alpha*)malloc(sizeof(Alpha)*	alpha_array_size);
 
-//#pragma omp parallel for
+#pragma omp parallel for
 	for (int i = 0; i < alpha_array_size; i++)
 	{
 		alpha_array[i].q = Q_NOT_CHECKED;
@@ -356,18 +356,18 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	if (rank == MASTER) {
 		int num_workers = 0;
 		alpha = alpha_zero;
-		//#pragma omp parallel for
+//#pragma omp parallel for
 				//TODO pragma ordered?
-		for (int dst = 1; dst < world_size; dst++, alpha += alpha_zero)
+		for (int dst = 1; dst < world_size; dst++)
 		{
 			if (alpha <= alpha_max) {
 				MPI_Send(&alpha, 1, MPI_DOUBLE, dst, START_TAG, comm);
 				//#pragma omp critical
-				{
+				//{
 					num_workers++;
-				}
+				//}
 			}
-
+			alpha += alpha_zero;
 		}
 		while (num_workers > 0)
 		{
@@ -381,8 +381,6 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 				MPI_Unpack(buffer, BUFFER_SIZE, &position, W, K + 1, MPI_DOUBLE, comm);
 				alpha_found = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
 			}
-
-
 			if (alpha <= alpha_max && alpha_found == ALPHA_NOT_FOUND)
 			{
 				MPI_Send(&alpha, 1, MPI_DOUBLE, status.MPI_SOURCE, START_TAG, comm);
@@ -393,7 +391,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 		}
 		printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC);
 		//send to hosts finish tag
-//#pragma omp parallel for
+#pragma omp parallel for
 		for (int dst = 1; dst < world_size; dst++)
 			MPI_Send(&alpha, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
 
@@ -411,7 +409,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			q = get_quality_with_alpha(points, alpha, W, N, K, LIMIT);
 			MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
-			MPI_Pack(&W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
+			MPI_Pack(W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 		}
 	}
@@ -422,24 +420,22 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 
 int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, double* W, int dim) {
 	static int alpha_array_state = ALPHA_NOT_FOUND;
-
 	if (*returned_q <= QC)
 		alpha_array_state = ALPHA_POTENTIALLY_FOUND;
 	int index = (int)(((*returned_alpha) / alpha_array[0].value) - 1);
 	alpha_array[index].q = *returned_q;
 	copy_vector(alpha_array[index].W, W, dim);
-
-	double lowest_q = MAX_QC;
+	
 	for (int i = 0; i < alpha_array_size; i++)
 	{
 		if (alpha_array[index].q == Q_NOT_CHECKED)
 			return alpha_array_state;
-		if (alpha_array[index].q < QC)
+		if (alpha_array[index].q <= QC)
 		{
 			*returned_alpha = alpha_array[index].value;
 			*returned_q = alpha_array[index].q;
 			copy_vector(W, alpha_array[index].W, dim);
-			alpha_array_state = alpha_array_state = ALPHA_FOUND;
+			alpha_array_state = ALPHA_FOUND;
 			return alpha_array_state;
 		}
 	}
@@ -449,7 +445,7 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 double get_quality_with_alpha(Point* points,double alpha,double* W,int N,int K,int LIMIT) {
 	int fault_flag = FAULT,faulty_point;
 	double val;
-	for (int loop = 1; loop < LIMIT && fault_flag == FAULT; loop++)
+	for (int loop = 0; loop < LIMIT && fault_flag == FAULT; loop++)
 	{
 		fault_flag = NO_FAULT;
 		//3
@@ -470,3 +466,9 @@ double get_quality_with_alpha(Point* points,double alpha,double* W,int N,int K,i
 	//6 find q
 	return get_quality(points, W, N, K);
 }
+
+void print_arr(double* W, int dim) {
+	for (int i = 0; i < dim; i++)
+		printf("%f\n", W[i]);
+}
+
