@@ -4,7 +4,7 @@
 
 #define MASTER 0
 
-#define START_TAG 0
+#define START_TASK_TAG 0
 #define FINISH_PROCESS_TAG 1
 #define FINISH_TASK_TAG 2
 #define ALPHA_NOT_FOUND 0

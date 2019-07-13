@@ -5,7 +5,7 @@
 #include "myApp.h"
 #include <math.h>
 #include "cudaKernel.h"
-
+#include "Perceptron.h"
 
 __device__ double fOnGPU(int i) {
 
@@ -135,4 +135,50 @@ cudaError_t resultWithCuda(int *array, int arraysize, int *result)
 	t2 = omp_get_wtime();
 	printf("GPU time = %f=================\n", t2 - t1);
 	return cudaStatus;
+}
+
+
+double get_quality_with_alpha_GPU(Point* points, double alpha, double* W, int N, int K, int LIMIT) {
+	// TODO change return to be Cuda Error
+	Point* dev_points;
+	double t1, t2;
+	cudaError_t cudaStatus = cudaSuccess;
+
+	t1 = omp_get_wtime();
+	// Choose which GPU to run on, change this on a multi-GPU system.
+	cudaStatus = cudaSetDevice(0);
+	CHECK_ERRORS(cudaStatus, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?", cudaErrorUnknown)
+
+	// Allocate GPU buffer for temporary results - one member for each thread.
+	cudaStatus = cudaMalloc((void**)&dev_points, N * sizeof(Point));
+	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
+
+	for (int i = 0; i < N; i++)
+	{
+		cudaStatus = cudaMalloc((void**)&dev_points[i].x, sizeof(double)*(K + 1));
+		cudaMemcpy(dev_points[i].x, points[i].x, sizeof(double)*(K+1), cudaMemcpyHostToDevice);
+		cudaMemcpy(&dev_points[i].set, &points[i].set, sizeof(int), cudaMemcpyHostToDevice);
+	}
+	int fault_flag = FAULT, faulty_point;
+	double val;
+	for (int loop = 0; loop < LIMIT && fault_flag == FAULT; loop++)
+	{
+		fault_flag = NO_FAULT;
+		//3
+		for (int i = 0; i < N; i++) {
+			val = f(points[i].x, W, K);
+			if (sign(val) != points[i].set)
+			{
+				fault_flag = FAULT;
+				faulty_point = i;
+				break;
+			}
+		}
+		if (fault_flag == FAULT) {
+			//4
+			adjustW(W, K, points[faulty_point].x, val, alpha);
+		}
+	}
+	//6 find q
+	return get_quality(points, W, N, K);
 }

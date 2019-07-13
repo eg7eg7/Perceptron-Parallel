@@ -4,7 +4,7 @@
 #include "Perceptron.h"
 
 
-static const char PATH[] = "C:\\Dataset Maker Perceptron\\dataset.txt";
+static const char PATH[] = "C:\\dataset.txt";
 
 int test_mult_scalar_with_vector() {
 	double vector1[10] = { 11,11,11,11,11,11,11,11,11,11 };

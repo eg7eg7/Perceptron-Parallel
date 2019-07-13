@@ -361,7 +361,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 		for (int dst = 1; dst < world_size; dst++)
 		{
 			if (alpha <= alpha_max) {
-				MPI_Send(&alpha, 1, MPI_DOUBLE, dst, START_TAG, comm);
+				MPI_Send(&alpha, 1, MPI_DOUBLE, dst, START_TASK_TAG, comm);
 				//#pragma omp critical
 				//{
 					num_workers++;
@@ -380,10 +380,13 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 				MPI_Unpack(buffer, BUFFER_SIZE, &position, &returned_q, 1, MPI_DOUBLE, comm);
 				MPI_Unpack(buffer, BUFFER_SIZE, &position, W, K + 1, MPI_DOUBLE, comm);
 				alpha_found = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
+				if (alpha_found == ALPHA_FOUND)
+					printf("Alpha found by rank %d\n", status.MPI_SOURCE);
 			}
+			
 			if (alpha <= alpha_max && alpha_found == ALPHA_NOT_FOUND)
 			{
-				MPI_Send(&alpha, 1, MPI_DOUBLE, status.MPI_SOURCE, START_TAG, comm);
+				MPI_Send(&alpha, 1, MPI_DOUBLE, status.MPI_SOURCE, START_TASK_TAG, comm);
 				num_workers++;
 				alpha += alpha_zero;
 			}
@@ -398,11 +401,16 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	}
 	else //host is not MASTER
 	{
+		//COPY POINT DATA TO GPU HERE for reuse
 		double q;
 		int position;
 		while (1) {
 			position = 0;
 			MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
+			if(status.MPI_TAG == START_TASK_TAG)
+				printf("Rank %d received alpha %f from Master\n", rank, alpha);
+			else
+				printf("Rank %d finish\n", rank);
 			if (status.MPI_TAG == FINISH_PROCESS_TAG)
 				break;
 			zero_W(W, K);
@@ -412,7 +420,9 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			MPI_Pack(W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 		}
+		//free data from GPU here
 	}
+
 	free(W);
 	if (rank == MASTER)
 		free_alpha_array();

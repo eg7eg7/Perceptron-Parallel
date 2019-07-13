@@ -7,6 +7,8 @@
   kernel.cu
   vectors.cpp
   Perceptron.cpp
+c:\users\cudauser\desktop\parallel\cudampiopenmp_onvdi\perceptron.cpp(412): warning C4474: 'printf' : too many arguments passed for format string
+  c:\users\cudauser\desktop\parallel\cudampiopenmp_onvdi\perceptron.cpp(412): note: placeholders and their parameters expect 1 variadic arguments, but 2 were provided
   main.cpp
   Generating Code...
   CudaMPIOpenMP_onVDI.vcxproj -> C:\Users\cudauser\Desktop\parallel\x64\Debug\CudaMPIOpenMP_onVDI.exe
