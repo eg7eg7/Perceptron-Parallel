@@ -1,5 +1,6 @@
 
 #include "Perceptron.h"
+#include "cudaKernel.h"
 Alpha* alpha_array;
 int alpha_array_size;
 
@@ -305,7 +306,7 @@ void printPerceptronOutput(const char* path, double* W, int K, double alpha, dou
 #else 
 
 	FILE* file;
-	fopen_s(&file, path, "rw");
+	fopen_s(&file, path, "w");
 	if (q > QC)
 		fprintf(file, "Alpha is not found");
 	else
@@ -401,7 +402,8 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	}
 	else //host is not MASTER
 	{
-		//COPY POINT DATA TO GPU HERE for reuse
+		Point* dev_points;
+		CopyPointsToDevice(points, &dev_points, N, K);
 		double q;
 		int position;
 		while (1) {
@@ -414,13 +416,14 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			if (status.MPI_TAG == FINISH_PROCESS_TAG)
 				break;
 			zero_W(W, K);
-			q = get_quality_with_alpha(points, alpha, W, N, K, LIMIT);
+			get_quality_with_alpha_GPU(points, alpha, W, N, K, LIMIT);
+			q = get_quality(points, W, N, K);
 			MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Pack(W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 		}
-		//free data from GPU here
+		freePointsFromDevice(&dev_points, N);
 	}
 
 	free(W);

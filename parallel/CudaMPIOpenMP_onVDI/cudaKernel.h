@@ -5,19 +5,25 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <stdio.h>
+#include "Perceptron.h"
+#define NUM_CUDA_CORES 1000
 
 __device__ double fOnGPU(int i);
 
 // Sum array elements to smaller array
-__global__ void sumResultsKernel(int *result, int *sum_results, int *size);
+__global__ void sumResultsKernel(int *result, int *sum_results, int size);
+__device__ void add_vector_to_vector_device(double* vector1, double* vector2, int dim, double* result_vector);
+__device__ void mult_scalar_with_vector_device(double* vector, int dim, double scalar, double* result_vector);
 
-// sum small array into an integer (in result[0])
-__global__ void sumAllKernel(int *result);
+__global__ void adjustW_with_faulty_point(int *faulted_points, int size, Point* points, double* W,double* temp_vector, int K, double alpha);
 
 // calculate f function on GPU for each thread
-__global__ void fOnGPUKernel(int *result, int *array, int *size);
-
+__global__ void fOnGPUKernel(int *result, Point* points, double* W, int N, int K);
+__device__ double mult_vector_with_vector_device(double* vector1, double* vector2, int dim);
+__device__ void device_adjustW(double* W, double* temp_vector, Point* point, int K,double alpha);
 // Main function
-cudaError_t resultWithCuda(int *array, int arraysize, int *result);
 
+cudaError_t CopyPointsToDevice(Point* points, Point** dev_points, int N, int K);
+cudaError_t freePointsFromDevice(Point** dev_points, int N);
+cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, int N, int K, int LIMIT);
 #endif

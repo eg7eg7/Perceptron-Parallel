@@ -31,12 +31,6 @@ int main(int argc, char *argv[])
 			printf("Running in parallel with %d hosts.\n", size);
 		run_perceptron_parallel(OUTPUT_PATH, rank, size,MPI_COMM_WORLD, N, K, alpha_zero, alpha_max, LIMIT, QC, points, W);
 	}
-
-		
-	
-	
-	
-	
 	freePointArray(&points, N);
 	MPI_Finalize();
 	return 0;

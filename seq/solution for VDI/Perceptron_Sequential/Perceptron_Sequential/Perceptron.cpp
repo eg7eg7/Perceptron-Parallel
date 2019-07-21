@@ -186,7 +186,7 @@ void run_perceptron_sequential(int N, int K, double alpha_zero, double alpha_max
 		//2
 		zero_W(W, K);
 		//5 - loop through 3 and 4 til all points are properly classified or limit reached
-		for (loop = 1; loop < LIMIT && fault_flag == FAULT; loop++)
+		for (loop = 1; loop <= LIMIT && fault_flag == FAULT; loop++)
 		{
 			fault_flag = NO_FAULT;
 			//3

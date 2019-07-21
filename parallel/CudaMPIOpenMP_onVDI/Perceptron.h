@@ -15,6 +15,10 @@
 #define NO_FAULT 0
 #define FAULT 1
 #define Q_NOT_CHECKED -1
+#define POINT_CORRECT -1
+
+#define ALL_POINTS_CORRECT 1
+#define W_ADJUSTED 2
 
 #define PRINT
 /*
