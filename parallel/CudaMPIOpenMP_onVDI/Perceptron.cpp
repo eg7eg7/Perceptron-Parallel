@@ -102,7 +102,7 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	MPI_Bcast(QC, 1, MPI_DOUBLE, MASTER, comm);
 	initPointArray(point_array, *N, *K);
 
-	//if (rank == 1) { MPI_Finalize(); }
+	
 	int set;
 
 	for (int i = 0; i < (*N); i++)
@@ -280,11 +280,12 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 		printf("%f ", W[i]);
 	}
 	printf("]\n");
-	printf("Best W is W= [");
-	for (int i = 0; i < K + 1; i++) {
-		printf("%f ", min_W[i]);
-	}
-	printf("] with q=%f,alpha=%f\n", best_q, best_alpha);
+	//printf("]\n");
+	//printf("Best W is W= [");
+	//for (int i = 0; i < K + 1; i++) {
+	//	printf("%f ", min_W[i]);
+	//}
+	//printf("] with q=%f,alpha=%f\n", best_q, best_alpha);
 
 	t2 = omp_get_wtime();
 	printf("Perceptron sequential time is %f\n", t2 - t1);
@@ -403,8 +404,9 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	else //host is not MASTER
 	{
 		Point* dev_points;
-		CopyPointsToDevice(points, &dev_points, N, K);
-		double q;
+		double** dev_x_points;
+		CopyPointsToDevice(points, &dev_points,&dev_x_points, N, K);
+		double q =1.0;
 		int position;
 		while (1) {
 			position = 0;
@@ -416,14 +418,16 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			if (status.MPI_TAG == FINISH_PROCESS_TAG)
 				break;
 			zero_W(W, K);
-			get_quality_with_alpha_GPU(points, alpha, W, N, K, LIMIT);
+			//get_quality_with_alpha_GPU(dev_points, alpha, W, N, K, LIMIT);
+			
+			//TODO parallel it
 			q = get_quality(points, W, N, K);
 			MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Pack(W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 		}
-		freePointsFromDevice(&dev_points, N);
+		freePointsFromDevice(&dev_points,&dev_x_points, N);
 	}
 
 	free(W);

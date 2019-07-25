@@ -1,4 +1,5 @@
 #pragma once
+#pragma warning( disable : 4996)
 #ifndef PERCEPTRON
 #define PERCEPTRON
 #include <mpi.h>
