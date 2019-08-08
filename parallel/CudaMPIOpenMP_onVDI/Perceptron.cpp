@@ -288,19 +288,19 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 	//printf("] with q=%f,alpha=%f\n", best_q, best_alpha);
 
 	t2 = omp_get_wtime();
-	printf("Perceptron sequential time is %f\n", t2 - t1);
-	printPerceptronOutput(output_path, W, K, alpha, current_q, QC);
+	
+	printPerceptronOutput(output_path, W, K, alpha, current_q, QC,t2-t1);
 
 	free(W);
 	free(min_W);
 }
-void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC) {
+void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time) {
 #ifdef PRINT
 	if (q > QC)
-		printf("Alpha is not found\n");
+		printf("Alpha is not found, time - %f\n",time);
 	else
 	{
-		printf("Alpha minimum = %f q=%f\n", alpha, q);
+		printf("Alpha minimum = %f q=%f, time - %f\n", alpha, q, time);
 		print_arr(W, K + 1);
 
 	}
@@ -344,6 +344,7 @@ void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 }
 void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W)
 {
+	double t1, t2;
 	if (rank == MASTER)
 		init_alpha_array(alpha_max, alpha_zero, K + 1);
 	int alpha_found = ALPHA_NOT_FOUND;
@@ -356,6 +357,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	double returned_alpha;
 	double returned_q;
 	if (rank == MASTER) {
+		t1 = omp_get_wtime();
 		int num_workers = 0;
 		alpha = alpha_zero;
 //#pragma omp parallel for
@@ -394,7 +396,8 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			}
 
 		}
-		printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC);
+		t2 = omp_get_wtime();
+		printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC,t2-t1);
 		//send to hosts finish tag
 #pragma omp parallel for
 		for (int dst = 1; dst < world_size; dst++)

@@ -8,8 +8,6 @@
 #include "Perceptron.h"
 #define NUM_CUDA_CORES 1000
 
-__device__ double fOnGPU(int i);
-
 // Sum array elements to smaller array
 __global__ void sumResultsKernel(int *result, int *sum_results, int size);
 __device__ void add_vector_to_vector_device(double* vector1, double* vector2, int dim, double* result_vector);

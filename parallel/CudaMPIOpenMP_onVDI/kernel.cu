@@ -7,11 +7,6 @@
 #include "cudaKernel.h"
 #include "Perceptron.h"
 
-__device__ double fOnGPU(int i) {
-
-	return 1;
-}
-
 
 __global__ void sumResultsKernel(int *result, int *sum_results, int size) {
 	int i, index = threadIdx.x;
@@ -54,6 +49,7 @@ __device__ void device_adjustW(double* W, double* temp_vector, Point* point, int
 }
 //return 1 if all points correct, return -1 if W is adjusted
 __global__ void adjustW_with_faulty_point(int *faulty_points,int size,Point* points, double* W,double* temp_vector,int K,double alpha) {
+
 	int index;
 	for (int i = 0; i < size; i++)
 	{
@@ -77,7 +73,9 @@ __device__ double mult_vector_with_vector_device(double* vector1, double* vector
 }
 
 __global__ void fOnGPUKernel(int *result, Point* points,double* W, int N,int K) {
+
 	int index = threadIdx.x + blockIdx.x * NUM_CUDA_CORES;
+	
 	if (index >= N)
 		return;
 	double val = mult_vector_with_vector_device(points[index].x, W, K+1);
@@ -139,22 +137,24 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 	// Choose which GPU to run on, change this on a multi-GPU system.
 	cudaStatus = cudaSetDevice(0);
 	CHECK_ERRORS(cudaStatus, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?", cudaErrorUnknown)
+	
 	cudaStatus = cudaMalloc((void**)&W_dev, sizeof(double)*(K + 1));
-	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "1- cudaMalloc failed!\n", cudaErrorUnknown)
+	
 	cudaMemcpy(W_dev, W, sizeof(double)*(K + 1), cudaMemcpyHostToDevice);
 
 	cudaStatus = cudaMalloc((void**)&W_dev_temp, sizeof(double)*(K + 1));
-	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "2- cudaMalloc failed!\n", cudaErrorUnknown)
 
 	cudaStatus = cudaMalloc((void**)&device_results, sizeof(int)*N);
-	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "3- cudaMalloc failed!\n", cudaErrorUnknown)
 	
 	t1 = omp_get_wtime();
 	int num_blocks = (int) ceil(N / (double) NUM_CUDA_CORES);
 	cudaStatus = cudaMalloc((void**)&sum_results, sizeof(int)*num_blocks);
-	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "4- cudaMalloc failed!\n", cudaErrorUnknown)
 
-	int flag_sum_results = 0;
+	int flag_sum_results;
 
 	for (int i = 0;i < LIMIT; i++)
 	{
@@ -163,27 +163,27 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 		*/
 	fOnGPUKernel <<<num_blocks, NUM_CUDA_CORES>>> (device_results,points, W_dev, N,K);
 	cudaStatus = cudaGetLastError();
-	CHECK_ERRORS(cudaStatus, "fOnGPUKernel launch failed", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "5- fOnGPUKernel launch failed\n", cudaErrorUnknown)
 	cudaStatus = cudaDeviceSynchronize();
-	CHECK_ERRORS(cudaStatus, "Cuda sync failed", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "6- Cuda sync failed\n", cudaErrorUnknown)
 	/*
 	find first point to fail
 	*/
 	sumResultsKernel <<<1, num_blocks >>> (device_results, sum_results,N);
 	cudaStatus = cudaGetLastError();
-	CHECK_ERRORS(cudaStatus, "sumResultsKernel launch failed", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "7- sumResultsKernel launch failed\n", cudaErrorUnknown)
 	cudaStatus = cudaDeviceSynchronize();
-	CHECK_ERRORS(cudaStatus, "Cuda sync failed", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "8- Cuda sync failed\n", cudaErrorUnknown)
 	/*
 	adjust W if fault found
 	*/
 	adjustW_with_faulty_point<<<1,1>>>(sum_results, num_blocks, points, W_dev, W_dev_temp, K, alpha);
 	cudaStatus = cudaGetLastError();
-	CHECK_ERRORS(cudaStatus, "adjustW_with_faulty_point launch failed", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "9- adjustW_with_faulty_point launch failed\n", cudaErrorUnknown)
 
 	cudaStatus = cudaDeviceSynchronize();
 	
-	CHECK_ERRORS(cudaStatus, "Cuda sync failed", cudaErrorUnknown)
+	CHECK_ERRORS(cudaStatus, "10- Cuda sync failed\n", cudaErrorUnknown)
 	cudaMemcpy(&flag_sum_results, &(sum_results[0]), sizeof(int), cudaMemcpyDeviceToHost);
 	if (flag_sum_results == ALL_POINTS_CORRECT)
 		break;

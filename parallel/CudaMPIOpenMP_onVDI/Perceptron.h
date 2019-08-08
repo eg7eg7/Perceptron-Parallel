@@ -59,7 +59,7 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 void run_perceptron_parallel(const char* output_path, int rank, int world_size,MPI_Comm comm,int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W);
 
 int sign(double a);
-void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC);
+void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time);
 //add mallocAdjustment for easier freeing later
 
 //dummy???
