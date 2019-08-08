@@ -16,7 +16,7 @@ __device__ void mult_scalar_with_vector_device(double* vector, int dim, double s
 __global__ void adjustW_with_faulty_point(int *faulted_points, int size, Point* points, double* W,double* temp_vector, int K, double alpha);
 
 // calculate f function on GPU for each thread
-__global__ void fOnGPUKernel(int *result, Point* points, double* W, int N, int K);
+__global__ void fOnGPUKernel(int *result, Point* points, double* W, int N, int K, double* result_debug);
 __device__ double mult_vector_with_vector_device(double* vector1, double* vector2, int dim);
 __device__ void device_adjustW(double* W, double* temp_vector, Point* point, int K,double alpha);
 // Main function

@@ -34,15 +34,15 @@ __device__ void add_vector_to_vector_device(double* vector1, double* vector2, in
 	for (int i = 0; i < dim; i++)
 		result_vector[i] = vector1[i] + vector2[i];
 }
-
+__device__ int sign_device(double val)
+{
+	if (val >= 0)
+		return SET_A;
+	return SET_B;
+}
 __device__ void device_adjustW(double* W, double* temp_vector, Point* point, int K, double alpha) {
 	double val = mult_vector_with_vector_device((*point).x, W, K + 1);
-	int sign;
-	if (val >= 0)
-		sign = SET_A;
-	else
-		sign = SET_B;
-
+	int sign = sign_device(val);
 	mult_scalar_with_vector_device((*point).x, K + 1, alpha*(-sign), temp_vector);
 	add_vector_to_vector_device(W, temp_vector, K + 1, W);
 
@@ -72,14 +72,14 @@ __device__ double mult_vector_with_vector_device(double* vector1, double* vector
 	return result;
 }
 
-__global__ void fOnGPUKernel(int *result, Point* points,double* W, int N,int K) {
+__global__ void fOnGPUKernel(int *result, Point* points,double* W, int N,int K,double* result_debug) {
 
 	int index = threadIdx.x + blockIdx.x * NUM_CUDA_CORES;
 	
 	if (index >= N)
 		return;
 	double val = mult_vector_with_vector_device(points[index].x, W, K+1);
-	if (val*points[index].set < 0)
+	if (sign_device(val) != points[index].set)
 		result[index] = index;
 	else
 		result[index] = POINT_CORRECT;
@@ -156,16 +156,25 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 
 	int flag_sum_results;
 
+	/*
+	DEBUG
+	*************************************************************************/
+	double* device_results_debug;
+	cudaStatus = cudaMalloc((void**)&device_results_debug, sizeof(int)*N);
+	CHECK_ERRORS(cudaStatus, "3- cudaMalloc failed!\n", cudaErrorUnknown)
+	/***********************************************************************/
 	for (int i = 0;i < LIMIT; i++)
 	{
 		/*
 		do f on all points
 		*/
-	fOnGPUKernel <<<num_blocks, NUM_CUDA_CORES>>> (device_results,points, W_dev, N,K);
+	fOnGPUKernel <<<num_blocks, NUM_CUDA_CORES>>> (device_results,points, W_dev, N,K, device_results_debug);
 	cudaStatus = cudaGetLastError();
 	CHECK_ERRORS(cudaStatus, "5- fOnGPUKernel launch failed\n", cudaErrorUnknown)
 	cudaStatus = cudaDeviceSynchronize();
 	CHECK_ERRORS(cudaStatus, "6- Cuda sync failed\n", cudaErrorUnknown)
+
+
 	/*
 	find first point to fail
 	*/
