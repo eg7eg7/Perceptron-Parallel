@@ -1,0 +1,1 @@
+C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug

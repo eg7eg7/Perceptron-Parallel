@@ -154,6 +154,7 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 	cudaStatus = cudaMalloc((void**)&sum_results, sizeof(int)*num_blocks);
 	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
 
+	int flag_sum_results = 0;
 
 	for (int i = 0;i < LIMIT; i++)
 	{
@@ -169,6 +170,7 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 	find first point to fail
 	*/
 	sumResultsKernel <<<1, num_blocks >>> (device_results, sum_results,N);
+	cudaStatus = cudaGetLastError();
 	CHECK_ERRORS(cudaStatus, "sumResultsKernel launch failed", cudaErrorUnknown)
 	cudaStatus = cudaDeviceSynchronize();
 	CHECK_ERRORS(cudaStatus, "Cuda sync failed", cudaErrorUnknown)
@@ -176,18 +178,25 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 	adjust W if fault found
 	*/
 	adjustW_with_faulty_point<<<1,1>>>(sum_results, num_blocks, points, W_dev, W_dev_temp, K, alpha);
+	cudaStatus = cudaGetLastError();
+	CHECK_ERRORS(cudaStatus, "adjustW_with_faulty_point launch failed", cudaErrorUnknown)
+
 	cudaStatus = cudaDeviceSynchronize();
+	
 	CHECK_ERRORS(cudaStatus, "Cuda sync failed", cudaErrorUnknown)
-		if (sum_results[0] == ALL_POINTS_CORRECT)
-			break;
+	cudaMemcpy(&flag_sum_results, &(sum_results[0]), sizeof(int), cudaMemcpyDeviceToHost);
+	if (flag_sum_results == ALL_POINTS_CORRECT)
+		break;
 	}
 	
 	t2 = omp_get_wtime();
-	cudaMemcpy(W_dev, W, sizeof(double)*(K + 1), cudaMemcpyDeviceToHost);
+	cudaMemcpy(W, W_dev, sizeof(double)*(K + 1), cudaMemcpyDeviceToHost);
+	
+	printf("\nGPU time for alpha %f - %f\n",alpha,t2-t1);
 	cudaFree(W_dev);
 	cudaFree(W_dev_temp);
 	cudaFree(device_results);
 	cudaFree(sum_results);
-	printf("\nGPU time = %f\n", t2 - t1);
+	
 	return cudaStatus;
 }

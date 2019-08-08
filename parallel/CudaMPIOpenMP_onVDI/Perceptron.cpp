@@ -297,7 +297,7 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC) {
 #ifdef PRINT
 	if (q > QC)
-		printf("Alpha is not found");
+		printf("Alpha is not found\n");
 	else
 	{
 		printf("Alpha minimum = %f q=%f\n", alpha, q);
@@ -418,7 +418,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			if (status.MPI_TAG == FINISH_PROCESS_TAG)
 				break;
 			zero_W(W, K);
-			//get_quality_with_alpha_GPU(dev_points, alpha, W, N, K, LIMIT);
+			get_quality_with_alpha_GPU(dev_points, alpha, W, N, K, LIMIT);
 			
 			//TODO parallel it
 			q = get_quality(points, W, N, K);
