@@ -379,20 +379,11 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 		while (1) {
 			position = 0;
 			MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
-			/***********************************************************************/
-			//DEBUG
-			if(status.MPI_TAG == START_TASK_TAG)
-				printf("Rank %d received alpha %f from Master\n", rank, alpha);
-			else
-				printf("Rank %d finish\n", rank);
-			/***********************************************************************/
 			if (status.MPI_TAG == FINISH_PROCESS_TAG)
 				break;
 			zero_W(W, K);
-			get_quality_with_alpha_GPU(dev_points, alpha, W, N, K, LIMIT);
+			get_quality_with_alpha_GPU(dev_points, alpha, W, N, K, LIMIT,&q);
 			
-			//TODO parallel it
-			q = get_quality(points, W, N, K);
 			MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Pack(W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
@@ -400,7 +391,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 		}
 		t6 = omp_get_wtime();
 		printf("Rank %d - compute for all received alphas %f\n", rank, t6 - t5);
-		cudaMallocPointers(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
+		cudaMallocAndFreePointers(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 		freePointsFromDevice(&dev_points,&dev_x_points, N);
 	}
 
@@ -411,16 +402,18 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 
 int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, double* W, int dim) {
 	static int alpha_array_state = ALPHA_NOT_FOUND;
+	static int min_index = 0;
 	if (*returned_q <= QC)
 		alpha_array_state = ALPHA_POTENTIALLY_FOUND;
 	int index = (int)(((*returned_alpha) / alpha_array[0].value) - 1);
 	alpha_array[index].q = *returned_q;
 	copy_vector(alpha_array[index].W, W, dim);
 	
-	for (int i = 0; i < alpha_array_size; i++)
+	for (int i = min_index; i < alpha_array_size; i++)
 	{
 		if (alpha_array[index].q == Q_NOT_CHECKED)
 			return alpha_array_state;
+		
 		if (alpha_array[index].q <= QC)
 		{
 			*returned_alpha = alpha_array[index].value;
@@ -429,6 +422,7 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 			alpha_array_state = ALPHA_FOUND;
 			return alpha_array_state;
 		}
+		min_index = i;
 	}
 	return alpha_array_state;
 }
