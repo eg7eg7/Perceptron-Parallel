@@ -1,7 +1,7 @@
 #pragma warning( disable : 4996)
 #include "Perceptron.h"
 
-static const char INPUT_PATH[] = "C:\\Users\\cudauser\\Documents\\GitHub\\Parallel-Binary-Classification-Perceptron\\data1a.txt";
+static const char INPUT_PATH[] = "C:\\Users\\cudauser\\Documents\\GitHub\\Parallel-Binary-Classification-Perceptron\\data1.txt";
 //change to input.txt
 static const char OUTPUT_PATH[] = "C:\\Users\\cudauser\\Desktop\\Parallel-Binary-Classification-Perceptron\\output.txt";
 int main(int argc, char *argv[])

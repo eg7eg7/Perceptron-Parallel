@@ -125,7 +125,7 @@ cudaError_t CopyPointsToDevice(Point* points, Point** dev_points,double*** dev_x
 #pragma omp for
 		for (int i = 0; i < N; i++)
 		{
-			(*dev_x_points)[i] = (*dev_x_points)[0] + i*(K + 1) * sizeof(double*);
+			(*dev_x_points)[i] = (*dev_x_points)[0] + i*(K+1);
 			cudaMemcpy((*dev_x_points)[i], points[i].x, sizeof(double)*(K+1), cudaMemcpyHostToDevice);
 			Point pt;
 			pt.x = (*dev_x_points)[i];
@@ -139,12 +139,8 @@ cudaError_t freePointsFromDevice(Point** dev_points, double*** dev_x_points, int
 	cudaError_t cudaStatus = cudaSuccess;
 	cudaStatus = cudaSetDevice(0);
 	CHECK_ERRORS(cudaStatus, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?", cudaErrorUnknown)
-		// Allocate GPU buffer for temporary results - one member for each thread.
-		for (int i = 0; i < N; i++)
-		{
-			cudaStatus = cudaFree((*dev_x_points)[i]);
-			CHECK_ERRORS(cudaStatus, "cudaFree failed!", cudaErrorUnknown)
-		}
+	cudaStatus = cudaFree(**dev_x_points);
+	CHECK_ERRORS(cudaStatus, "cudaFree failed!", cudaErrorUnknown)
 	cudaStatus = cudaFree(*dev_points);
 	CHECK_ERRORS(cudaStatus, "cudaFree failed!", cudaErrorUnknown)
 	free(*dev_x_points);
