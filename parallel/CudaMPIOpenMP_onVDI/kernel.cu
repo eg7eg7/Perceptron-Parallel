@@ -120,12 +120,12 @@ cudaError_t CopyPointsToDevice(Point* points, Point** dev_points,double*** dev_x
 		
 	cudaStatus = cudaMalloc((void**)dev_points, N * sizeof(Point));
 	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
-
+	cudaStatus = cudaMalloc((void**)(*dev_x_points), N*(K + 1) * sizeof(double));
+	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown);
 #pragma omp for
 		for (int i = 0; i < N; i++)
 		{
-			cudaStatus = cudaMalloc((void**)&((*dev_x_points)[i]), (K + 1) * sizeof(double));
-			CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown);
+			(*dev_x_points)[i] = (*dev_x_points)[0] + i*(K + 1) * sizeof(double*);
 			cudaMemcpy((*dev_x_points)[i], points[i].x, sizeof(double)*(K+1), cudaMemcpyHostToDevice);
 			Point pt;
 			pt.x = (*dev_x_points)[i];
@@ -241,12 +241,12 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 	t2 = omp_get_wtime();
 	cudaMemcpy(W, W_dev, sizeof(double)*(K + 1), cudaMemcpyDeviceToHost);
 	
-	printf("\nGPU time for alpha %f - %f\n",alpha,t2-t1);
+	printf("\nGPU time for alpha %f - %f - W compute\n",alpha,t2-t1);
 	/*
 	Check quality
 	*/
 	/********************************************************************************************/
-
+	t1 = omp_get_wtime();
 	//Do f on all points with adjusted W
 	if (flag_sum_results == W_ADJUSTED)
 	{
@@ -276,6 +276,7 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 	int count;
 	cudaMemcpy(&count, &(sum_results[0]), sizeof(int), cudaMemcpyDeviceToHost);
 	*q = (count / (double) N);
-	printf("\nfor alpha %f, q is %f\n",alpha,*q);
+	t2 = omp_get_wtime();
+	printf("\nGPU time for alpha %f - %f - q compute\n", alpha, t2 - t1);
 	return cudaStatus;
 }
