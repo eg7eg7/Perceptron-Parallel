@@ -72,7 +72,7 @@ __device__ double mult_vector_with_vector_device(double* vector1, double* vector
 	return result;
 }
 
-__global__ void fOnGPUKernel(int *result, Point* points,double* W, int N,int K,double* result_debug) {
+__global__ void fOnGPUKernel(int *result, Point* points,double* W, int N,int K) {
 
 	int index = threadIdx.x + blockIdx.x * NUM_CUDA_CORES;
 	
@@ -127,48 +127,65 @@ cudaError_t freePointsFromDevice(Point** dev_points, double*** dev_x_points, int
 	free(*dev_x_points);
 	return cudaStatus;
 }
-
-cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, int N, int K, int LIMIT) {
-	int* device_results;
-	int* sum_results;
-	double t1, t2;
+cudaError_t cudaMallocPointers(int N, int K, int num_blocks, double** W_dev, double** W_dev_temp,int** device_results, int** sum_results, int malloc_flag)
+{
+	static int isLastMalloc = FREE_MALLOC_FLAG;
+	static double *W_dev_p = 0, *W_dev_temp_p = 0;
+	static int *device_results_p=0,*sum_results_p=0;
 	cudaError_t cudaStatus = cudaSuccess;
-	double *W_dev,*W_dev_temp;
 	// Choose which GPU to run on, change this on a multi-GPU system.
 	cudaStatus = cudaSetDevice(0);
+	if (!isLastMalloc && malloc_flag)
+	{
 	CHECK_ERRORS(cudaStatus, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?", cudaErrorUnknown)
-	
-	cudaStatus = cudaMalloc((void**)&W_dev, sizeof(double)*(K + 1));
-	CHECK_ERRORS(cudaStatus, "1- cudaMalloc failed!\n", cudaErrorUnknown)
-	
-	cudaMemcpy(W_dev, W, sizeof(double)*(K + 1), cudaMemcpyHostToDevice);
+	cudaStatus = cudaMalloc((void**)W_dev, sizeof(double)*(K + 1));
+	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!\n", cudaErrorUnknown)
+	cudaStatus = cudaMalloc((void**)W_dev_temp, sizeof(double)*(K + 1));
+	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!\n", cudaErrorUnknown)
+	cudaStatus = cudaMalloc((void**)device_results, sizeof(int)*N);
+	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!\n", cudaErrorUnknown)
+	cudaStatus = cudaMalloc((void**)sum_results, sizeof(int)*num_blocks);
+	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!\n", cudaErrorUnknown)
 
-	cudaStatus = cudaMalloc((void**)&W_dev_temp, sizeof(double)*(K + 1));
-	CHECK_ERRORS(cudaStatus, "2- cudaMalloc failed!\n", cudaErrorUnknown)
-
-	cudaStatus = cudaMalloc((void**)&device_results, sizeof(int)*N);
-	CHECK_ERRORS(cudaStatus, "3- cudaMalloc failed!\n", cudaErrorUnknown)
-	
-	t1 = omp_get_wtime();
-	int num_blocks = (int) ceil(N / (double) NUM_CUDA_CORES);
-	cudaStatus = cudaMalloc((void**)&sum_results, sizeof(int)*num_blocks);
-	CHECK_ERRORS(cudaStatus, "4- cudaMalloc failed!\n", cudaErrorUnknown)
+	W_dev_p = *W_dev;
+	W_dev_temp_p = *W_dev_temp;
+	device_results_p = *device_results;
+	sum_results_p = *sum_results;
+	isLastMalloc = MALLOC_FLAG;
+	}
+	else if(isLastMalloc && !malloc_flag)
+	{
+		cudaStatus = cudaFree(W_dev_p);
+		CHECK_ERRORS(cudaStatus, "cudaFree failed!\n", cudaErrorUnknown)
+		cudaStatus = cudaFree(W_dev_temp_p);
+		CHECK_ERRORS(cudaStatus, "cudaFree failed!\n", cudaErrorUnknown)
+		cudaStatus = cudaFree(device_results_p);
+		CHECK_ERRORS(cudaStatus, "cudaFree failed!\n", cudaErrorUnknown)
+		cudaStatus = cudaFree(sum_results_p);
+		CHECK_ERRORS(cudaStatus, "cudaFree failed!\n", cudaErrorUnknown)
+		isLastMalloc = FREE_MALLOC_FLAG;
+	}
+}
+cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, int N, int K, int LIMIT) {
+	static int *device_results,*sum_results;
+	static double *W_dev, *W_dev_temp;
 
 	int flag_sum_results;
+	int num_blocks = (int)ceil(N / (double)NUM_CUDA_CORES);
+	double t1, t2;
+	cudaError_t cudaStatus = cudaSuccess;
+	
+	cudaMallocPointers(N,K,num_blocks,&W_dev,&W_dev_temp,&device_results,&sum_results,MALLOC_FLAG);
 
-	/*
-	DEBUG
-	*************************************************************************/
-	double* device_results_debug;
-	cudaStatus = cudaMalloc((void**)&device_results_debug, sizeof(int)*N);
-	CHECK_ERRORS(cudaStatus, "3- cudaMalloc failed!\n", cudaErrorUnknown)
-	/***********************************************************************/
+	cudaMemcpy(W_dev, W, sizeof(double)*(K + 1), cudaMemcpyHostToDevice);
+
+	t1 = omp_get_wtime();
 	for (int i = 0;i < LIMIT; i++)
 	{
 		/*
 		do f on all points
 		*/
-	fOnGPUKernel <<<num_blocks, NUM_CUDA_CORES>>> (device_results,points, W_dev, N,K, device_results_debug);
+	fOnGPUKernel <<<num_blocks, NUM_CUDA_CORES>>> (device_results,points, W_dev, N,K);
 	cudaStatus = cudaGetLastError();
 	CHECK_ERRORS(cudaStatus, "5- fOnGPUKernel launch failed\n", cudaErrorUnknown)
 	cudaStatus = cudaDeviceSynchronize();
@@ -202,10 +219,6 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 	cudaMemcpy(W, W_dev, sizeof(double)*(K + 1), cudaMemcpyDeviceToHost);
 	
 	printf("\nGPU time for alpha %f - %f\n",alpha,t2-t1);
-	cudaFree(W_dev);
-	cudaFree(W_dev_temp);
-	cudaFree(device_results);
-	cudaFree(sum_results);
-	
+
 	return cudaStatus;
 }

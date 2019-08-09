@@ -1,6 +1,7 @@
 
 #include "Perceptron.h"
 #include "cudaKernel.h"
+
 Alpha* alpha_array;
 int alpha_array_size;
 
@@ -33,8 +34,8 @@ void fileReadFailure(char* error) {
 	fileReadFailure();
 }
 void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array) {
-	//MPI_Status status;
 	const int line_size = 1000;
+	int set;
 	char delim[] = " ";
 	char* line;
 	FILE *file;
@@ -93,7 +94,6 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 		}
 	}
 
-
 	MPI_Bcast(N, 1, MPI_INT, MASTER, comm);
 	MPI_Bcast(K, 1, MPI_INT, MASTER, comm);
 	MPI_Bcast(alpha_zero, 1, MPI_DOUBLE, MASTER, comm);
@@ -101,10 +101,7 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	MPI_Bcast(LIMIT, 1, MPI_INT, MASTER, comm);
 	MPI_Bcast(QC, 1, MPI_DOUBLE, MASTER, comm);
 	initPointArray(point_array, *N, *K);
-
 	
-	int set;
-
 	for (int i = 0; i < (*N); i++)
 	{
 		if (rank == MASTER) {
@@ -136,19 +133,15 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	}
 
 }
-
 double f(double* x, double* W, int dim) {
 	return mult_vector_with_vector(x, W, dim + 1);
 }
-
 int init_W(double** W, int K) {
-	//W is initialized to 0
 	*W = (double*)malloc((K + 1) * sizeof(double));
 	if (*W == NULL)
 		return 0;
 	return 1;
 }
-
 void initPointArray(Point** points, int N, int K) {
 	if (N <= 0 || K <= 0)
 	{
@@ -218,22 +211,15 @@ void zero_W(double* W, int K) {
 		W[i] = 0.0;
 }
 void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W) {
-	double t1, t2;
+	double val,t1,t2;
+	int fault_flag = FAULT,loop,faulty_point;
+	double alpha, current_q = MAX_QC;
 	t1 = omp_get_wtime();
-	double val;
-	int fault_flag = FAULT;
-	double alpha, current_q = MAX_QC, best_q = MAX_QC, best_alpha;
-	int loop;
-	int faulty_point;
-	double* min_W;
 	if (!init_W(&W, K))
 	{
 		printf("malloc assignment error");
 		return;
 	}
-
-	init_W(&min_W, K);
-
 	//alpha=alpha zero  1, alpha=alpha+alpha_zero 9
 	for (alpha = alpha_zero; alpha <= alpha_max; alpha += alpha_zero)
 	{
@@ -261,49 +247,24 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 		//6 find q
 		current_q = get_quality(points, W, N, K);
 		//7+8
-		if (current_q < best_q)
-		{
-			copy_vector(min_W, W, K + 1);
-			best_q = current_q;
-			best_alpha = alpha;
-		}
 		if (current_q <= QC)
 			break;
 	}
-	if (alpha > alpha_max)
-		printf("\tstop reason : alpha value exceeded. alpha max %f\n", alpha_max);
-	if (current_q < QC)
-		printf("\tstop reason : desired quality reached. q %f of QC=%f\n", current_q, QC);
-
-	printf("q=%f,alpha=%f\n\nW = [", current_q, alpha);
-	for (int i = 0; i < K + 1; i++) {
-		printf("%f ", W[i]);
-	}
-	printf("]\n");
-	//printf("]\n");
-	//printf("Best W is W= [");
-	//for (int i = 0; i < K + 1; i++) {
-	//	printf("%f ", min_W[i]);
-	//}
-	//printf("] with q=%f,alpha=%f\n", best_q, best_alpha);
-
 	t2 = omp_get_wtime();
-	
 	printPerceptronOutput(output_path, W, K, alpha, current_q, QC,t2-t1);
-
 	free(W);
-	free(min_W);
+	
 }
 void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time) {
 #ifdef PRINT
 	if (q > QC)
-		printf("Alpha is not found, time - %f\n",time);
+		printf("Alpha is not found\n");
 	else
 	{
-		printf("Alpha minimum = %f q=%f, time - %f\n", alpha, q, time);
+		printf("Alpha minimum = %f q=%f\n", alpha, q);
 		print_arr(W, K + 1);
-
 	}
+	printf("\nTotal time - %f seconds \n", time);
 #else 
 
 	FILE* file;
@@ -344,7 +305,7 @@ void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 }
 void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W)
 {
-	double t1, t2;
+	double t1, t2,t3,t4,t5,t6;
 	if (rank == MASTER)
 		init_alpha_array(alpha_max, alpha_zero, K + 1);
 	int alpha_found = ALPHA_NOT_FOUND;
@@ -408,16 +369,23 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	{
 		Point* dev_points;
 		double** dev_x_points;
+		t3 = omp_get_wtime();
 		CopyPointsToDevice(points, &dev_points,&dev_x_points, N, K);
+		t4 = omp_get_wtime();
+		printf("Rank %d - Copy to cuda time %f\n", rank, t4 - t3);
 		double q =1.0;
 		int position;
+		t5 = omp_get_wtime();
 		while (1) {
 			position = 0;
 			MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
+			/***********************************************************************/
+			//DEBUG
 			if(status.MPI_TAG == START_TASK_TAG)
 				printf("Rank %d received alpha %f from Master\n", rank, alpha);
 			else
 				printf("Rank %d finish\n", rank);
+			/***********************************************************************/
 			if (status.MPI_TAG == FINISH_PROCESS_TAG)
 				break;
 			zero_W(W, K);
@@ -430,6 +398,9 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			MPI_Pack(W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 		}
+		t6 = omp_get_wtime();
+		printf("Rank %d - compute for all received alphas %f\n", rank, t6 - t5);
+		cudaMallocPointers(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 		freePointsFromDevice(&dev_points,&dev_x_points, N);
 	}
 
