@@ -40,7 +40,6 @@ c:\program files\mpich2\include\mpicxx.h(1905): warning : expression has no effe
 c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effect
 c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effect
 c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effect
-C:/Users/cudauser/Documents/GitHub/Parallel-Binary-Classification-Perceptron/parallel/CudaMPIOpenMP_onVDI/kernel.cu(187): warning : missing return statement at end of non-void function "cudaMallocAndFreePointers"
 c:\program files\mpich2\include\mpicxx.h(409): warning : expression has no effect
 c:\program files\mpich2\include\mpicxx.h(409): warning : expression has no effect
 c:\program files\mpich2\include\mpicxx.h(409): warning : expression has no effect
@@ -77,9 +76,7 @@ c:\program files\mpich2\include\mpicxx.h(1905): warning : expression has no effe
 c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effect
 c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effect
 c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effect
-C:/Users/cudauser/Documents/GitHub/Parallel-Binary-Classification-Perceptron/parallel/CudaMPIOpenMP_onVDI/kernel.cu(187): warning : missing return statement at end of non-void function "cudaMallocAndFreePointers"
   kernel.cu
-c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\cudampiopenmp_onvdi\kernel.cu(187): warning C4715: 'cudaMallocAndFreePointers': not all control paths return a value
   vectors.cpp
   Perceptron.cpp
   main.cpp

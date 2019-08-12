@@ -120,18 +120,27 @@ cudaError_t CopyPointsToDevice(Point* points, Point** dev_points,double*** dev_x
 		
 	cudaStatus = cudaMalloc((void**)dev_points, N * sizeof(Point));
 	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
+		
 	cudaStatus = cudaMalloc((void**)(*dev_x_points), N*(K + 1) * sizeof(double));
+	
+	
 	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown);
+	double t1 = omp_get_wtime();
 #pragma omp for
 		for (int i = 0; i < N; i++)
 		{
 			(*dev_x_points)[i] = (*dev_x_points)[0] + i*(K+1);
+			
 			cudaMemcpy((*dev_x_points)[i], points[i].x, sizeof(double)*(K+1), cudaMemcpyHostToDevice);
+			
+			//printf("\ntime for memcpy = %f\n", t2 - t1);
 			Point pt;
 			pt.x = (*dev_x_points)[i];
 			pt.set = points[i].set;
 			cudaMemcpy(&(*dev_points)[i], &pt, sizeof(Point), cudaMemcpyHostToDevice);
 		}
+		double t2 = omp_get_wtime();
+		printf("\ntime in for = %f\n", t2 - t1);
 	return cudaStatus;
 }
 
@@ -154,7 +163,7 @@ cudaError_t cudaMallocAndFreePointers(int N, int K, int num_blocks, double** W_d
 	cudaError_t cudaStatus = cudaSuccess;
 	// Choose which GPU to run on, change this on a multi-GPU system.
 	cudaStatus = cudaSetDevice(0);
-	if (!isLastMalloc && malloc_flag)
+	if (!isLastMalloc && malloc_flag==MALLOC_FLAG)
 	{
 	CHECK_ERRORS(cudaStatus, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?", cudaErrorUnknown)
 	cudaStatus = cudaMalloc((void**)W_dev, sizeof(double)*(K + 1));
@@ -172,7 +181,7 @@ cudaError_t cudaMallocAndFreePointers(int N, int K, int num_blocks, double** W_d
 	sum_results_p = *sum_results;
 	isLastMalloc = MALLOC_FLAG;
 	}
-	else if(isLastMalloc && !malloc_flag)
+	else if(isLastMalloc && malloc_flag==FREE_MALLOC_FLAG)
 	{
 		cudaStatus = cudaFree(W_dev_p);
 		CHECK_ERRORS(cudaStatus, "cudaFree failed!\n", cudaErrorUnknown)
@@ -184,6 +193,7 @@ cudaError_t cudaMallocAndFreePointers(int N, int K, int num_blocks, double** W_d
 		CHECK_ERRORS(cudaStatus, "cudaFree failed!\n", cudaErrorUnknown)
 		isLastMalloc = FREE_MALLOC_FLAG;
 	}
+	return cudaStatus;
 }
 cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, int N, int K, int LIMIT, double* q) {
 	static int *device_results,*sum_results;

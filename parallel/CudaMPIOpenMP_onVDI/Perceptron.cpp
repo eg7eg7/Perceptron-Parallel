@@ -317,6 +317,8 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	int printed_output = 0;
 	double returned_alpha;
 	double returned_q;
+
+
 	if (rank == MASTER) {
 		t1 = omp_get_wtime();
 		int num_workers = 0;
@@ -355,7 +357,6 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 				num_workers++;
 				alpha += alpha_zero;
 			}
-
 		}
 		t2 = omp_get_wtime();
 		printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC,t2-t1);
@@ -363,7 +364,6 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 #pragma omp parallel for
 		for (int dst = 1; dst < world_size; dst++)
 			MPI_Send(&alpha, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
-
 	}
 	else //host is not MASTER
 	{
@@ -376,6 +376,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 		double q =1.0;
 		int position;
 		t5 = omp_get_wtime();
+
 		while (1) {
 			position = 0;
 			MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
