@@ -1,6 +1,7 @@
 
 #include "Perceptron.h"
 #include "cudaKernel.h"
+#include <stdlib.h>
 
 Alpha* alpha_array;
 int alpha_array_size;
@@ -290,31 +291,29 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 	
 }
 void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time) {
-#ifdef PRINT
+
+
+	FILE* file;
+	fopen_s(&file, path, "w");
+	
 	if (q > QC)
+	{
 		printf("Alpha is not found\n");
+		fprintf(file, "Alpha is not found");
+	}
+		
 	else
 	{
 		printf("Alpha minimum = %f q=%f\n", alpha, q);
 		print_arr(W, K + 1);
-	}
-	printf("\nTotal time - %f seconds \n", time);
-#else 
-
-	FILE* file;
-	fopen_s(&file, path, "w");
-	if (q > QC)
-		fprintf(file, "Alpha is not found");
-	else
-	{
 		fprintf(file, "Alpha minimum = %f q=%f\n", alpha, q);
 		for (int i = 0; i <= K; i++)
 			fprintf(file, "%f\n", W[i]);
 
 	}
-
+	printf("\nTotal time - %f seconds \n", time);
 	fclose(file);
-#endif
+
 
 }
 void free_alpha_array() {
@@ -339,34 +338,33 @@ void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 }
 void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points)
 {
-	double t1,t2,t3,t4,t5,t6;
-	double* W;
+	double *W, t1, t2;
 	if (rank == MASTER)
 		init_alpha_array(alpha_max, alpha_zero, K + 1);
 	MPI_Status status;
 	char buffer[BUFFER_SIZE];
 	init_W(&W, K);
-	double alpha, returned_alpha, returned_q;
-	int printed_output = 0, position, alpha_found = ALPHA_NOT_FOUND;
+	double alpha, returned_alpha, returned_q, q=MAX_QC;
+	int position, alpha_found = ALPHA_NOT_FOUND, num_workers = 0;
 
 
 	if (rank == MASTER) {
 		t1 = omp_get_wtime();
-		int num_workers = 0;
 		alpha = alpha_zero;
-//#pragma omp parallel for
-				//TODO pragma ordered?
+		//Send first alpha values to hosts
+#pragma omp parallel for
 		for (int dst = 1; dst < world_size; dst++)
 		{
 			if (alpha <= alpha_max) {
 				MPI_Send(&alpha, 1, MPI_DOUBLE, dst, START_TASK_TAG, comm);
-				//#pragma omp critical
-				//{
+				#pragma omp critical
+				{
 					num_workers++;
-				//}
+				}
 			}
 			alpha += alpha_zero;
 		}
+
 		while (num_workers > 0)
 		{
 			position = 0;
@@ -379,7 +377,12 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 				MPI_Unpack(buffer, BUFFER_SIZE, &position, W, K + 1, MPI_DOUBLE, comm);
 				alpha_found = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
 				if (alpha_found == ALPHA_FOUND)
+				{
+					t2 = omp_get_wtime();
 					printf("Alpha found by rank %d\n", status.MPI_SOURCE);
+					printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
+				}
+					
 			}
 			
 			if (alpha <= alpha_max && alpha_found == ALPHA_NOT_FOUND)
@@ -389,18 +392,18 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 				alpha += alpha_zero;
 			}
 		}
-		t2 = omp_get_wtime();
-		printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC,t2-t1);
-		//send to hosts finish tag
+		if (alpha_found != ALPHA_FOUND)
+		{
+			t2 = omp_get_wtime();
+			printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
+		}
+		//send hosts the finish tag
 #pragma omp parallel for
 		for (int dst = 1; dst < world_size; dst++)
 			MPI_Send(&alpha, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
 	}
 	else //host is not MASTER
 	{
-		double q = MAX_QC;
-		t5 = omp_get_wtime();
-
 		while (1) {
 			position = 0;
 			MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
@@ -414,8 +417,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			MPI_Pack(W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 		}
-		t6 = omp_get_wtime();
-		printf("Rank %d - compute for all received alphas %f\n", rank, t6 - t5);
+		
 		cudaMallocAndFreePointersFromQualityFunction(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 	}
 
@@ -425,6 +427,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 }
 
 int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, double* W, int dim) {
+	
 	static int alpha_array_state = ALPHA_NOT_FOUND;
 	static int min_index = 0;
 	if (*returned_q <= QC)
@@ -433,6 +436,7 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 	alpha_array[index].q = *returned_q;
 	copy_vector(alpha_array[index].W, W, dim);
 	
+	//DO NOT USE OpenMP here - order really matters!
 	for (int i = min_index; i < alpha_array_size; i++)
 	{
 		if (alpha_array[index].q == Q_NOT_CHECKED)

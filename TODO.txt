@@ -8,3 +8,8 @@ remove t1 t2 from code
 remove unecassary comments
 go over OMP
 code maid
+
+remove getLastError where needed
+replace checkErrors
+
+add mallocAdjustment for easier freeing later

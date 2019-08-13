@@ -97,7 +97,6 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cudaKernel.h" />
-    <ClInclude Include="myMacro.h" />
     <ClInclude Include="Perceptron.h" />
     <ClInclude Include="vectors.h" />
   </ItemGroup>

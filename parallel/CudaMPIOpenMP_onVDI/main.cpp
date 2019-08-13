@@ -3,7 +3,7 @@
 
 static const char INPUT_PATH[] = "C:\\Users\\cudauser\\Documents\\GitHub\\Parallel-Binary-Classification-Perceptron\\data1.txt";
 //change to input.txt
-static const char OUTPUT_PATH[] = "C:\\Users\\cudauser\\Desktop\\Parallel-Binary-Classification-Perceptron\\output.txt";
+static const char OUTPUT_PATH[] = "..\\output.txt";
 int main(int argc, char *argv[])
 {
 	int rank, size;
@@ -25,6 +25,8 @@ int main(int argc, char *argv[])
 	Perceptron_readDataset(INPUT_PATH, rank, MPI_COMM_WORLD, &N, &K, &alpha_zero, &alpha_max, &LIMIT, &QC, &points, &dev_points);
 	t2 = omp_get_wtime();
 	printf("Rank %d read data time - %f seconds\n", rank, t2 - t1);
+
+
 	if (size < 2)
 	{
 		printf("N=%d K=%d alpha zero = %f alpha_max = %f LIMIT=%d QC = %f\n", N, K, alpha_zero, alpha_max, LIMIT, QC);
