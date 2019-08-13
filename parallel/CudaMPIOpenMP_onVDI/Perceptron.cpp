@@ -33,14 +33,13 @@ void fileReadFailure(char* error) {
 	printf("%s\n", error);
 	fileReadFailure();
 }
-void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array) {
+void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array, Point** device_point_array) {
 	const int line_size = 1000;
 	int set;
 	char delim[] = " ";
 	char* line;
 	FILE *file;
 	char *token;
-	Point** device_point_array;
 	Point* temp_point_array;
 	double* x_point_array;
 	double* dev_x_point_array;
@@ -149,12 +148,10 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	}
 	if (rank != MASTER)
 	{
-		
-		//memcpy temp_point_array dev_point_array to gpu
-		//memcpy x_point_array to dev_x_point_array
-		//
-		//************************************//
-		//make sure to use malloc and free for temp_point_array and others
+		memcpyDoubleArrayToDevice(&dev_x_point_array, &x_point_array, (*N)*arr_size);
+		memcpyPointArrayToDevice(device_point_array, &temp_point_array, (*N));
+
+
 		free(x_point_array);
 		free(temp_point_array);
 	}
@@ -190,13 +187,16 @@ void initPointArray(Point** points, int N, int K) {
 	}
 }
 
-void freePointArray(Point** points, int size) {
+void freePointArray(Point** points,Point** dev_points, int size) {
 #pragma omp parallel for
 	for (int i = 0; i < size; i++)
 	{
 		free((*points)[i].x);
 	}
 	free(*points);
+
+	if(*dev_points != 0)
+		freeCudaPointArray(dev_points);
 }
 
 void printPointArray(Point* points, int size, int dim, int rank) {
@@ -337,20 +337,17 @@ void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 	}
 
 }
-void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W)
+void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points)
 {
-	double t1, t2,t3,t4,t5,t6;
+	double t1,t2,t3,t4,t5,t6;
+	double* W;
 	if (rank == MASTER)
 		init_alpha_array(alpha_max, alpha_zero, K + 1);
-	int alpha_found = ALPHA_NOT_FOUND;
-	int position;
 	MPI_Status status;
 	char buffer[BUFFER_SIZE];
 	init_W(&W, K);
-	double alpha;
-	int printed_output = 0;
-	double returned_alpha;
-	double returned_q;
+	double alpha, returned_alpha, returned_q;
+	int printed_output = 0, position, alpha_found = ALPHA_NOT_FOUND;
 
 
 	if (rank == MASTER) {
@@ -401,14 +398,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	}
 	else //host is not MASTER
 	{
-		Point* dev_points;
-		double** dev_x_points;
-		t3 = omp_get_wtime();
-		CopyPointsToDevice(points, &dev_points,&dev_x_points, N, K);
-		t4 = omp_get_wtime();
-		printf("Rank %d - Copy to cuda time %f\n", rank, t4 - t3);
-		double q =1.0;
-		int position;
+		double q = MAX_QC;
 		t5 = omp_get_wtime();
 
 		while (1) {
@@ -417,7 +407,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			if (status.MPI_TAG == FINISH_PROCESS_TAG)
 				break;
 			zero_W(W, K);
-			get_quality_with_alpha_GPU(dev_points, alpha, W, N, K, LIMIT,&q);
+			get_quality_with_alpha_GPU(points, alpha, W, N, K, LIMIT,&q);
 			
 			MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
@@ -426,8 +416,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 		}
 		t6 = omp_get_wtime();
 		printf("Rank %d - compute for all received alphas %f\n", rank, t6 - t5);
-		cudaMallocAndFreePointers(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
-		freePointsFromDevice(&dev_points,&dev_x_points, N);
+		cudaMallocAndFreePointersFromQualityFunction(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 	}
 
 	free(W);

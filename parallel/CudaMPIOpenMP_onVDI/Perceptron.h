@@ -21,9 +21,6 @@
 #define ALL_POINTS_CORRECT 1
 #define W_ADJUSTED 2
 
-#define COPY_POINTS_TO_CUDA 1
-#define COPY_POINTS_TO_HOST 0
-
 #define PRINT
 /*
 x - array of data for each dimension
@@ -41,7 +38,7 @@ typedef struct struct_alpha {
 } Alpha;
 
 
-void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array);
+void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array, Point** device_point_array);
 /*
 vector multiplication, W and x are one dimension higher than K
 for multiplication Point.x[dim]=1
@@ -56,10 +53,10 @@ int init_W(double** W, int K);
 void zero_W(double* W, int K);
 void adjustW(double* W, int dim, double* p_xi, double f_p_scalar, double alpha);
 void initPointArray(Point** points, int N, int K);
-void freePointArray(Point** points, int size);
+void freePointArray(Point** points, Point** dev_points, int size);
 void printPointArray(Point* points, int size, int dim,int rank);
 void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W);
-void run_perceptron_parallel(const char* output_path, int rank, int world_size,MPI_Comm comm,int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W);
+void run_perceptron_parallel(const char* output_path, int rank, int world_size,MPI_Comm comm,int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points);
 
 int sign(double a);
 void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time);

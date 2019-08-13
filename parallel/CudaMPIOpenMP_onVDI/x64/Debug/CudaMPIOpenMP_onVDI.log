@@ -79,6 +79,8 @@ c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effe
   kernel.cu
   vectors.cpp
   Perceptron.cpp
+c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\cudampiopenmp_onvdi\perceptron.cpp(342): warning C4101: 't4': unreferenced local variable
+c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\cudampiopenmp_onvdi\perceptron.cpp(342): warning C4101: 't3': unreferenced local variable
   main.cpp
   Generating Code...
   CudaMPIOpenMP_onVDI.vcxproj -> C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug\CudaMPIOpenMP_onVDI.exe

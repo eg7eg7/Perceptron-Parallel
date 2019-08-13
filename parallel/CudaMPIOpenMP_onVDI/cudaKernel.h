@@ -22,11 +22,14 @@ __global__ void fOnGPUKernel(int *result, Point* points, double* W, int N, int K
 __device__ double mult_vector_with_vector_device(double* vector1, double* vector2, int dim);
 __device__ void device_adjustW(double* W, double* temp_vector, Point* point, int K,double alpha);
 // Main function
+cudaError_t memcpyDoubleArrayToDevice(double **dest, double **src, int n);
+cudaError_t memcpyPointArrayToDevice(Point **dest, Point **src, int n);
 cudaError_t cudaMallocDoubleBySize(double** arr, int arr_size);
 cudaError_t cudaMallocPointBySize(Point** arr, int arr_size);
-cudaError_t cudaMallocAndFreePointers(int N, int K, int num_blocks, double** W_dev, double** W_dev_temp, int** device_results, int** sum_results, int malloc_flag);
+cudaError_t cudaMallocAndFreePointersFromQualityFunction(int N, int K, int num_blocks, double** W_dev, double** W_dev_temp, int** device_results, int** sum_results, int malloc_flag);
 cudaError_t CopyPointsToDevice(Point* points, Point** dev_points,double*** dev_x_points, int N, int K);
 cudaError_t freePointsFromDevice(Point** dev_points, double*** dev_x_points, int N);
 cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, int N, int K, int LIMIT, double* q);
 cudaError_t setDevice();
+cudaError_t freeCudaPointArray(Point** dev_points);
 #endif
