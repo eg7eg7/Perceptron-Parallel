@@ -116,7 +116,8 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 		cudaMallocPointBySize(device_point_array, (*N));
 	}
 		
-
+	double t1 = omp_get_wtime();
+	
 	for (int i = 0; i < (*N); i++)
 	{
 		if (rank == MASTER) {
@@ -147,12 +148,12 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 		}
 		
 	}
+	double t2 = omp_get_wtime();
+	printf("\nrank %d time in for %f\n",rank, t2 - t1);
 	if (rank != MASTER)
 	{
 		memcpyDoubleArrayToDevice(&dev_x_point_array, &x_point_array, (*N)*arr_size);
 		memcpyPointArrayToDevice(device_point_array, &temp_point_array, (*N));
-
-
 		free(x_point_array);
 		free(temp_point_array);
 	}
