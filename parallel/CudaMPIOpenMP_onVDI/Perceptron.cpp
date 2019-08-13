@@ -40,6 +40,11 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	char* line;
 	FILE *file;
 	char *token;
+	Point** device_point_array;
+	Point* temp_point_array;
+	double* x_point_array;
+	double* dev_x_point_array;
+
 	if (rank == MASTER)
 	{
 		line = (char*)malloc(line_size);
@@ -101,7 +106,17 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	MPI_Bcast(LIMIT, 1, MPI_INT, MASTER, comm);
 	MPI_Bcast(QC, 1, MPI_DOUBLE, MASTER, comm);
 	initPointArray(point_array, *N, *K);
-	
+
+	int arr_size = (*K + 1);
+	if (rank != MASTER)
+	{
+		temp_point_array = (Point*) malloc(sizeof(Point)*(*N));
+		x_point_array = (double*)malloc(sizeof(double)*arr_size*(*N));
+		cudaMallocDoubleBySize(&dev_x_point_array, (*N)*arr_size);
+		cudaMallocPointBySize(device_point_array, (*N));
+	}
+		
+
 	for (int i = 0; i < (*N); i++)
 	{
 		if (rank == MASTER) {
@@ -122,15 +137,34 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 			else
 				(*point_array)[i].set = SET_B;
 		}
-		MPI_Bcast((*point_array)[i].x, (*K) + 1, MPI_DOUBLE, MASTER, comm);
+		MPI_Bcast((*point_array)[i].x, arr_size, MPI_DOUBLE, MASTER, comm);
 		MPI_Bcast(&(*point_array)[i].set, 1, MPI_INT, MASTER, comm);
+		if (rank != MASTER)
+		{
+			copy_vector(&x_point_array[i*arr_size], (*point_array)[i].x, arr_size);
+			temp_point_array[i].x = dev_x_point_array + i*arr_size;
+			temp_point_array[i].set = (*point_array)[i].set;
+		}
+		
 	}
-
+	if (rank != MASTER)
+	{
+		
+		//memcpy temp_point_array dev_point_array to gpu
+		//memcpy x_point_array to dev_x_point_array
+		//
+		//************************************//
+		//make sure to use malloc and free for temp_point_array and others
+		free(x_point_array);
+		free(temp_point_array);
+	}
+	
 	if (rank == MASTER)
 	{
 		free(line);
 		fclose(file);
 	}
+	
 
 }
 double f(double* x, double* W, int dim) {

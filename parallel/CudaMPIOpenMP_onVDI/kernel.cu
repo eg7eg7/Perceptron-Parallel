@@ -108,8 +108,29 @@ __global__ void fOnGPUKernel(int *result, Point* points,double* W, int N,int K) 
 		result[index] = POINT_CORRECT;
 
 }
-
-
+cudaError_t setDevice()
+{
+	cudaError_t cudaStatus = cudaSuccess;
+	cudaStatus = cudaSetDevice(0);
+	CHECK_ERRORS(cudaStatus, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?", cudaErrorUnknown)
+	return cudaStatus;
+}
+cudaError_t cudaMallocDoubleBySize(double** arr, int arr_size)
+{
+	setDevice();
+	cudaError_t cudaStatus = cudaSuccess;
+	cudaStatus = cudaMalloc((void**)arr, arr_size * sizeof(double));
+	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
+	return cudaStatus;
+}
+cudaError_t cudaMallocPointBySize(Point** arr, int arr_size)
+{
+	setDevice();
+	cudaError_t cudaStatus = cudaSuccess;
+	cudaStatus = cudaMalloc((void**)arr, arr_size * sizeof(Point));
+	CHECK_ERRORS(cudaStatus, "cudaMalloc failed!", cudaErrorUnknown)
+	return cudaStatus;
+}
 cudaError_t CopyPointsToDevice(Point* points, Point** dev_points,double*** dev_x_points, int N, int K) {
 	*dev_x_points = (double**)malloc(sizeof(double*)*N);
 	

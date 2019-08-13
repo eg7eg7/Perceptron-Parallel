@@ -14,8 +14,13 @@ int main(int argc, char *argv[])
 	double alpha_zero, alpha_max, QC, t1, t2;
 	double* W = 0;
 	Point* points = 0;
+	int dataset_location = COPY_POINTS_TO_CUDA;
 	if (size < 2)
+	{
 		omp_set_num_threads(1);
+		int dataset_location = COPY_POINTS_TO_HOST;
+	}
+		
 	t1 = omp_get_wtime();
 	Perceptron_readDataset(INPUT_PATH, rank, MPI_COMM_WORLD, &N, &K, &alpha_zero, &alpha_max, &LIMIT, &QC, &points);
 	t2 = omp_get_wtime();

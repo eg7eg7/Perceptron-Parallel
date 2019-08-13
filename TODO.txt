@@ -6,3 +6,5 @@ check with a few PC's
 create document with explanations
 remove t1 t2 from code
 remove unecassary comments
+go over OMP
+code maid

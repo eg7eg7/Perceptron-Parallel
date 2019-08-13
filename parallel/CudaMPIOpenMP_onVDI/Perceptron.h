@@ -21,6 +21,9 @@
 #define ALL_POINTS_CORRECT 1
 #define W_ADJUSTED 2
 
+#define COPY_POINTS_TO_CUDA 1
+#define COPY_POINTS_TO_HOST 0
+
 #define PRINT
 /*
 x - array of data for each dimension
