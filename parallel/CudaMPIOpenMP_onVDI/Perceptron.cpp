@@ -448,30 +448,6 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 	return alpha_array_state;
 }
 
-double get_quality_with_alpha(Point* points,double alpha,double* W,int N,int K,int LIMIT) {
-	int fault_flag = FAULT,faulty_point;
-	double val;
-	for (int loop = 0; loop < LIMIT && fault_flag == FAULT; loop++)
-	{
-		fault_flag = NO_FAULT;
-		//3
-		for (int i = 0; i < N; i++) {
-			val = f(points[i].x, W, K);
-			if (sign(val) != points[i].set)
-			{
-				fault_flag = FAULT;
-				faulty_point = i;
-				break;
-			}
-		}
-		if (fault_flag == FAULT) {
-			//4
-			adjustW(W, K, points[faulty_point].x, val, alpha);
-		}
-	}
-	//6 find q
-	return get_quality(points, W, N, K);
-}
 
 void print_arr(double* W, int dim) {
 	for (int i = 0; i < dim; i++)
