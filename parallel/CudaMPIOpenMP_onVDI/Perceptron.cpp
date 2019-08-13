@@ -245,10 +245,9 @@ void zero_W(double* W, int K) {
 	for (int i = 0; i <= K; i++)
 		W[i] = 0.0;
 }
-void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W) {
-	double val,t1,t2;
+void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points) {
+	double val,t1,t2, *W, alpha, current_q = MAX_QC;
 	int fault_flag = FAULT,loop,faulty_point;
-	double alpha, current_q = MAX_QC;
 	t1 = omp_get_wtime();
 	if (!init_W(&W, K))
 	{
@@ -293,15 +292,14 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time) {
 
 
-	FILE* file;
+	FILE* file=NULL;
 	fopen_s(&file, path, "w");
-	
+
 	if (q > QC)
 	{
 		printf("Alpha is not found\n");
 		fprintf(file, "Alpha is not found");
-	}
-		
+	}		
 	else
 	{
 		printf("Alpha minimum = %f q=%f\n", alpha, q);
@@ -309,13 +307,11 @@ void printPerceptronOutput(const char* path, double* W, int K, double alpha, dou
 		fprintf(file, "Alpha minimum = %f q=%f\n", alpha, q);
 		for (int i = 0; i <= K; i++)
 			fprintf(file, "%f\n", W[i]);
-
 	}
 	printf("\nTotal time - %f seconds \n", time);
 	fclose(file);
-
-
 }
+
 void free_alpha_array() {
 #pragma omp parallel for
 	for (int i = 0; i < alpha_array_size; i++)
@@ -347,7 +343,6 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	double alpha, returned_alpha, returned_q, q=MAX_QC;
 	int position, alpha_found = ALPHA_NOT_FOUND, num_workers = 0;
 
-
 	if (rank == MASTER) {
 		t1 = omp_get_wtime();
 		alpha = alpha_zero;
@@ -365,6 +360,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			alpha += alpha_zero;
 		}
 
+		//send new alphas to hosts that finish
 		while (num_workers > 0)
 		{
 			position = 0;
@@ -417,17 +413,14 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			MPI_Pack(W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 			MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 		}
-		
 		cudaMallocAndFreePointersFromQualityFunction(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 	}
-
 	free(W);
 	if (rank == MASTER)
 		free_alpha_array();
 }
 
 int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, double* W, int dim) {
-	
 	static int alpha_array_state = ALPHA_NOT_FOUND;
 	static int min_index = 0;
 	if (*returned_q <= QC)

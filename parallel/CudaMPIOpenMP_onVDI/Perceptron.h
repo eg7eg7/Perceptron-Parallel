@@ -95,7 +95,7 @@ void adjustW(double* W, int dim, double* p_xi, double f_p_scalar, double alpha);
 /*if positive return SET A, else returns SET B*/
 int sign(double a);
 
-void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, double* W);
+void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points);
 
 double get_quality_with_alpha(Point* points, double alpha, double* W, int N, int K, int LIMIT);
 

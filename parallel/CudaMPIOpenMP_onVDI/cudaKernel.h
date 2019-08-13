@@ -2,6 +2,8 @@
 #ifndef CUDAKERNEL_H
 #define CUDAKERNEL_H
 #define CHECK_ERRORS(status, msg, retValue) if ((status) != cudaSuccess) { fprintf(stderr, (msg));return (retValue); }
+#define CHECK_AND_SYNC_ERRORS(msg) cudaStatus = cudaGetLastError();CHECK_ERRORS(cudaStatus, msg, cudaErrorUnknown) cudaStatus = cudaDeviceSynchronize();CHECK_ERRORS(cudaStatus, "Cuda sync failed\n", cudaErrorUnknown)
+
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <stdio.h>
