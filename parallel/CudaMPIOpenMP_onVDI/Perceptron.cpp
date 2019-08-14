@@ -334,65 +334,85 @@ void sendFinishTagToWorld(int world_size, MPI_Comm comm)
 	for (int dst = 1; dst < world_size; dst++)
 		MPI_Send(&a, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
 }
+void packBuffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm)
+{
+	int position = 0;
+	MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
+	MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
+	MPI_Pack(W, W_size, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
+}
+void unpackBuffer(char* buffer,double& alpha,double& q,double* W,int W_size, const MPI_Comm comm)
+{
+	int position = 0;
+	MPI_Unpack(buffer, BUFFER_SIZE, &position, &alpha, 1, MPI_DOUBLE, comm);
+	MPI_Unpack(buffer, BUFFER_SIZE, &position, &q, 1, MPI_DOUBLE, comm);
+	MPI_Unpack(buffer, BUFFER_SIZE, &position, W, W_size, MPI_DOUBLE, comm);
+}
+
+void sendNextAlpha(double& alpha,const double alpha_max,const double alpha_zero,int dest,int& num_workers,MPI_Comm comm)
+{
+	if (alpha <= alpha_max)
+	{
+		MPI_Send(&alpha, 1, MPI_DOUBLE, dest, START_TASK_TAG, comm);
+		num_workers++;
+		alpha += alpha_zero;
+	}
+}
+
+void masterDynamicAlphaSending(const int N,const int K,double *W,const double alpha_zero,const double alpha_max,const int LIMIT,const double QC,MPI_Comm comm, int world_size, char* buffer, const char* output_path)
+{
+	MPI_Status status;
+	double alpha, returned_alpha,returned_q, t1, t2;
+	int num_workers = 0, alpha_found_state = ALPHA_NOT_FOUND;
+	init_alpha_array(alpha_max, alpha_zero, K + 1);
+	alpha = alpha_zero;
+	sendFirstAlphasToWorld(alpha_max, alpha_zero,alpha, world_size, num_workers, comm);
+	t1 = omp_get_wtime();
+	//send new alphas to hosts that finish
+	while (num_workers > 0)
+	{
+		MPI_Recv(buffer, BUFFER_SIZE, MPI_PACKED, MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &status);
+		num_workers--;
+		if (alpha_found_state != ALPHA_FOUND)
+		{
+			unpackBuffer(buffer, returned_alpha, returned_q, W, K + 1, comm);
+
+			alpha_found_state = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
+			if (alpha_found_state == ALPHA_FOUND)
+			{
+				t2 = omp_get_wtime();
+				printf("Alpha found by rank %d\n", status.MPI_SOURCE);
+				printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
+			}
+		}
+		if (alpha_found_state == ALPHA_NOT_FOUND)
+			sendNextAlpha(alpha, alpha_max, alpha_zero, status.MPI_SOURCE, num_workers, comm);
+
+	}
+	if (alpha_found_state != ALPHA_FOUND)
+	{
+		t2 = omp_get_wtime();
+		printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
+	}
+	//send hosts the finish tag
+	sendFinishTagToWorld(world_size, comm);
+	free_alpha_array();
+}
 void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, Point* points_device)
 {
 	double *W, t1, t2;
-	if (rank == MASTER)
-		init_alpha_array(alpha_max, alpha_zero, K + 1);
-	MPI_Status status;
 	char buffer[BUFFER_SIZE];
 	init_W(&W, K);
-	double alpha, returned_alpha, returned_q, q = MAX_QC;
-	int position, alpha_found = ALPHA_NOT_FOUND, num_workers = 0;
-
+	
 	if (rank == MASTER) {
-		t1 = omp_get_wtime();
-		alpha = alpha_zero;
-		sendFirstAlphasToWorld(alpha_max, alpha, alpha_zero, world_size, num_workers, comm);
-
-		//send new alphas to hosts that finish
-		while (num_workers > 0)
-		{
-			position = 0;
-			MPI_Recv(buffer, BUFFER_SIZE, MPI_PACKED, MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &status);
-			num_workers--;
-			if (alpha_found != ALPHA_FOUND)
-			{
-				MPI_Unpack(buffer, BUFFER_SIZE, &position, &returned_alpha, 1, MPI_DOUBLE, comm);
-				MPI_Unpack(buffer, BUFFER_SIZE, &position, &returned_q, 1, MPI_DOUBLE, comm);
-				MPI_Unpack(buffer, BUFFER_SIZE, &position, W, K + 1, MPI_DOUBLE, comm);
-				alpha_found = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
-				if (alpha_found == ALPHA_FOUND)
-				{
-					t2 = omp_get_wtime();
-					printf("Alpha found by rank %d\n", status.MPI_SOURCE);
-					printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
-				}
-			}
-			if (alpha <= alpha_max && alpha_found == ALPHA_NOT_FOUND)
-			{
-				MPI_Send(&alpha, 1, MPI_DOUBLE, status.MPI_SOURCE, START_TASK_TAG, comm);
-				num_workers++;
-				alpha += alpha_zero;
-			}
-		}
-		if (alpha_found != ALPHA_FOUND)
-		{
-			t2 = omp_get_wtime();
-			printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
-		}
-		//send hosts the finish tag
-		sendFinishTagToWorld(world_size, comm);
+		masterDynamicAlphaSending(N, K, W, alpha_zero, alpha_max, LIMIT, QC, comm, world_size, buffer, output_path);
 	}
 	else //host is not MASTER
 	{
 		get_alphas_and_calc_q(buffer, N, K, LIMIT, W, points, points_device, comm);
 		cudaMallocAndFreePointersFromQualityFunction(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 	}
-
 	free(W);
-	if (rank == MASTER)
-		free_alpha_array();
 }
 void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, double *W, Point* points, Point* points_device, MPI_Comm comm) {
 	int position;
@@ -400,19 +420,13 @@ void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, double *W, Poi
 	MPI_Status status;
 
 	while (1) {
-		position = 0;
 		MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
 		if (status.MPI_TAG == FINISH_PROCESS_TAG)
 			break;
 		zero_W(W, K);
-
 		check_points_and_adjustW(points, W, N, K, LIMIT, alpha);
-
 		get_quality_with_GPU(points_device, W, N, K, &q);
-
-		MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
-		MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
-		MPI_Pack(W, K + 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
+		packBuffer(buffer, alpha, q, W, K + 1, comm);
 		MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 	}
 }
