@@ -226,22 +226,20 @@ int sign(double a)
 	else
 		return SET_B;
 }
-void adjustW(double* W, int dim, double* p_xi, double f_p_scalar, double alpha) {
-	//TODO change malloc to happen once
-	double *temp_result = (double*)malloc(sizeof(double)*(dim + 1));
-
+void adjustW(double* W,double* temp_result, int dim, double* p_xi, double f_p_scalar, double alpha) {
+	
 	mult_scalar_with_vector(p_xi, dim + 1, alpha*(-sign(f_p_scalar)), temp_result);
 	add_vector_to_vector(W, temp_result, dim + 1, W);
-
-	free(temp_result);
 }
 void zero_W(double* W, int K) {
 	for (int i = 0; i <= K; i++)
 		W[i] = 0.0;
 }
 void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points) {
-	double  t1, t2, *W, alpha, current_q = MAX_QC;
+	double  t1, t2, *W,*temp_result, alpha, current_q = MAX_QC;
 	int fault_flag = FAULT;
+	
+	init_W(&temp_result, K);
 	t1 = omp_get_wtime();
 	if (!init_W(&W, K))
 	{
@@ -255,7 +253,7 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 		zero_W(W, K);
 		//5 - loop through 3 and 4 til all points are properly classified or limit reached
 
-		check_points_and_adjustW(points, W, N, K, LIMIT, alpha);
+		check_points_and_adjustW(points, W,temp_result, N, K, LIMIT, alpha);
 
 		//6 find q
 		current_q = get_quality(points, W, N, K);
@@ -266,7 +264,7 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 	t2 = omp_get_wtime();
 	printPerceptronOutput(output_path, W, K, alpha, current_q, QC, t2 - t1);
 	free(W);
-
+	free(temp_result);
 }
 void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time) {
 
@@ -359,11 +357,12 @@ void sendNextAlpha(double& alpha,const double alpha_max,const double alpha_zero,
 	}
 }
 
-void masterDynamicAlphaSending(const int N,const int K,double *W,const double alpha_zero,const double alpha_max,const int LIMIT,const double QC,MPI_Comm comm, int world_size, char* buffer, const char* output_path)
+void masterDynamicAlphaSending(const int N,const int K,const double alpha_zero,const double alpha_max,const int LIMIT,const double QC,MPI_Comm comm, int world_size, char* buffer, const char* output_path)
 {
 	MPI_Status status;
-	double alpha, returned_alpha,returned_q, t1, t2;
+	double alpha, returned_alpha,returned_q,*W, t1, t2;
 	int num_workers = 0, alpha_found_state = ALPHA_NOT_FOUND;
+	init_W(&W, K);
 	init_alpha_array(alpha_max, alpha_zero, K + 1);
 	alpha = alpha_zero;
 	sendFirstAlphasToWorld(alpha_max, alpha_zero,alpha, world_size, num_workers, comm);
@@ -376,7 +375,6 @@ void masterDynamicAlphaSending(const int N,const int K,double *W,const double al
 		if (alpha_found_state != ALPHA_FOUND)
 		{
 			unpackBuffer(buffer, returned_alpha, returned_q, W, K + 1, comm);
-
 			alpha_found_state = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
 			if (alpha_found_state == ALPHA_FOUND)
 			{
@@ -387,7 +385,6 @@ void masterDynamicAlphaSending(const int N,const int K,double *W,const double al
 		}
 		if (alpha_found_state == ALPHA_NOT_FOUND)
 			sendNextAlpha(alpha, alpha_max, alpha_zero, status.MPI_SOURCE, num_workers, comm);
-
 	}
 	if (alpha_found_state != ALPHA_FOUND)
 	{
@@ -397,41 +394,44 @@ void masterDynamicAlphaSending(const int N,const int K,double *W,const double al
 	//send hosts the finish tag
 	sendFinishTagToWorld(world_size, comm);
 	free_alpha_array();
+	free(W);
 }
 void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, Point* points_device)
 {
-	double *W, t1, t2;
 	char buffer[BUFFER_SIZE];
-	init_W(&W, K);
 	
 	if (rank == MASTER) {
-		masterDynamicAlphaSending(N, K, W, alpha_zero, alpha_max, LIMIT, QC, comm, world_size, buffer, output_path);
+		masterDynamicAlphaSending(N, K, alpha_zero, alpha_max, LIMIT, QC, comm, world_size, buffer, output_path);
 	}
 	else //host is not MASTER
 	{
-		get_alphas_and_calc_q(buffer, N, K, LIMIT, W, points, points_device, comm);
+		get_alphas_and_calc_q(buffer, N, K, LIMIT, points, points_device, comm);
 		cudaMallocAndFreePointersFromQualityFunction(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 	}
-	free(W);
 }
-void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, double *W, Point* points, Point* points_device, MPI_Comm comm) {
+void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm) {
 	int position;
-	double alpha, q;
+	double alpha, q, *W,*temp_result;
 	MPI_Status status;
+	init_W(&W, K);
+	init_W(&temp_result, K);
 
 	while (1) {
 		MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
 		if (status.MPI_TAG == FINISH_PROCESS_TAG)
 			break;
 		zero_W(W, K);
-		check_points_and_adjustW(points, W, N, K, LIMIT, alpha);
+		check_points_and_adjustW(points, W,temp_result, N, K, LIMIT, alpha);
 		get_quality_with_GPU(points_device, W, N, K, &q);
 		packBuffer(buffer, alpha, q, W, K + 1, comm);
 		MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 	}
+	free(W);
+	free(temp_result);
 }
-void check_points_and_adjustW(Point *points, double *W, int N, int K, int LIMIT, double alpha)
+void check_points_and_adjustW(Point *points, double *W,double *temp_arr, int N, int K, int LIMIT, double alpha)
 {
+	
 	int fault_flag = FAULT;
 	double val;
 
@@ -445,7 +445,7 @@ void check_points_and_adjustW(Point *points, double *W, int N, int K, int LIMIT,
 			{
 				fault_flag = FAULT;
 				//4
-				adjustW(W, K, points[i].x, val, alpha);
+				adjustW(W,temp_arr, K, points[i].x, val, alpha);
 				break;
 			}
 		}

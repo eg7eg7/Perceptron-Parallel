@@ -90,7 +90,7 @@ double f(double* x, double* W, int dim);
 double get_quality(Point* points, double* W, int N, int K);
 
 /*adjust W vector accoring to alpha and value - sequential */
-void adjustW(double* W, int dim, double* p_xi, double f_p_scalar, double alpha);
+void adjustW(double* W,double* temp_result, int dim, double* p_xi, double f_p_scalar, double alpha);
 
 /*if positive return SET A, else returns SET B*/
 int sign(double a);
@@ -115,11 +115,11 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 /*main function to run perceptron in parallel, both master and slaves*/
 void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, Point* points_device);
 
-void check_points_and_adjustW(Point *points, double *W, int N, int K, int LIMIT, double alpha);
+void check_points_and_adjustW(Point *points, double *W, double *temp_arr, int N, int K, int LIMIT, double alpha);
 
-void masterDynamicAlphaSending(const int N, const int K, double *W, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path);
+void masterDynamicAlphaSending(const int N, const int K, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path);
 
-void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, double *W, Point* points, Point* points_device, MPI_Comm comm);
+void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm);
 
 void sendFirstAlphasToWorld(const double alpha_max, const double alpha_zero, double& alpha, const int world_size, int& num_workers, MPI_Comm comm);
 
