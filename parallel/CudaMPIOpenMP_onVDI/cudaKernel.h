@@ -44,7 +44,7 @@ cudaError_t cudaMallocPointBySize(Point** arr, int arr_size);
 //will malloc if empty pointers, will free if not empty
 cudaError_t cudaMallocAndFreePointersFromQualityFunction(int N, int K, int num_blocks, double** W_dev, double** W_dev_temp, int** device_results, int** sum_results, int malloc_flag);
 cudaError_t syncAndCheckErrors(const char* msg);
-cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, int N, int K, int LIMIT, double* q);
+cudaError_t get_quality_with_GPU(Point* points, double* W, int N, int K, double* q);
 cudaError_t setDevice();
 cudaError_t freeCudaPointArray(Point** dev_points);
 #endif

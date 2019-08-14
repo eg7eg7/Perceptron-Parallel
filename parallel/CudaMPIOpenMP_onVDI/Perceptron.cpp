@@ -110,14 +110,12 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	int arr_size = (*K + 1);
 	if (rank != MASTER)
 	{
-		temp_point_array = (Point*) malloc(sizeof(Point)*(*N));
+		temp_point_array = (Point*)malloc(sizeof(Point)*(*N));
 		x_point_array = (double*)malloc(sizeof(double)*arr_size*(*N));
 		cudaMallocDoubleBySize(&dev_x_point_array, (*N)*arr_size);
 		cudaMallocPointBySize(device_point_array, (*N));
 	}
-		
-	double t1 = omp_get_wtime();
-	
+
 	for (int i = 0; i < (*N); i++)
 	{
 		if (rank == MASTER) {
@@ -146,24 +144,21 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 			temp_point_array[i].x = dev_x_point_array + i*arr_size;
 			temp_point_array[i].set = (*point_array)[i].set;
 		}
-		
+
 	}
-	double t2 = omp_get_wtime();
-	printf("\nrank %d time in for %f\n",rank, t2 - t1);
-	if (rank != MASTER)
+	if (rank == MASTER)
+	{
+		free(line);
+		fclose(file);
+	}
+	else
 	{
 		memcpyDoubleArrayToDevice(&dev_x_point_array, &x_point_array, (*N)*arr_size);
 		memcpyPointArrayToDevice(device_point_array, &temp_point_array, (*N));
 		free(x_point_array);
 		free(temp_point_array);
 	}
-	
-	if (rank == MASTER)
-	{
-		free(line);
-		fclose(file);
-	}
-	
+
 
 }
 double f(double* x, double* W, int dim) {
@@ -189,7 +184,7 @@ void initPointArray(Point** points, int N, int K) {
 	}
 }
 
-void freePointArray(Point** points,Point** dev_points, int size) {
+void freePointArray(Point** points, Point** dev_points, int size) {
 #pragma omp parallel for
 	for (int i = 0; i < size; i++)
 	{
@@ -197,7 +192,7 @@ void freePointArray(Point** points,Point** dev_points, int size) {
 	}
 	free(*points);
 
-	if(*dev_points != 0)
+	if (*dev_points != 0)
 		freeCudaPointArray(dev_points);
 }
 
@@ -212,16 +207,13 @@ void printPointArray(Point* points, int size, int dim, int rank) {
 
 double get_quality(Point* points, double* W, int N, int K) {
 	int N_mis = 0;
-#pragma omp parallel for
+	double val;
+#pragma omp parallel for private(val) reduction(+:N_mis)
 	for (int i = 0; i < N; i++) {
-		double val = f(points[i].x, W, K);
+		val = f(points[i].x, W, K);
 		if (sign(val) != points[i].set)
 		{
-#pragma omp critical
-			{
-				N_mis++;
-			}
-			
+			N_mis += 1;
 		}
 	}
 	return (double)((double)N_mis) / N;
@@ -235,6 +227,7 @@ int sign(double a)
 		return SET_B;
 }
 void adjustW(double* W, int dim, double* p_xi, double f_p_scalar, double alpha) {
+	//TODO change malloc to happen once
 	double *temp_result = (double*)malloc(sizeof(double)*(dim + 1));
 
 	mult_scalar_with_vector(p_xi, dim + 1, alpha*(-sign(f_p_scalar)), temp_result);
@@ -247,8 +240,8 @@ void zero_W(double* W, int K) {
 		W[i] = 0.0;
 }
 void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points) {
-	double val,t1,t2, *W, alpha, current_q = MAX_QC;
-	int fault_flag = FAULT,loop,faulty_point;
+	double  t1, t2, *W, alpha, current_q = MAX_QC;
+	int fault_flag = FAULT;
 	t1 = omp_get_wtime();
 	if (!init_W(&W, K))
 	{
@@ -261,24 +254,9 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 		//2
 		zero_W(W, K);
 		//5 - loop through 3 and 4 til all points are properly classified or limit reached
-		for (loop = 0; loop < LIMIT && fault_flag == FAULT; loop++)
-		{
-			fault_flag = NO_FAULT;
-			//3
-			for (int i = 0; i < N; i++) {
-				val = f(points[i].x, W, K);
-				if (sign(val) != points[i].set)
-				{
-					fault_flag = FAULT;
-					faulty_point = i;
-					break;
-				}
-			}
-			if (fault_flag == FAULT) {
-				//4
-				adjustW(W, K, points[faulty_point].x, val, alpha);
-			}
-		}
+
+		check_points_and_adjustW(points, W, N, K, LIMIT, alpha);
+
 		//6 find q
 		current_q = get_quality(points, W, N, K);
 		//7+8
@@ -286,21 +264,21 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 			break;
 	}
 	t2 = omp_get_wtime();
-	printPerceptronOutput(output_path, W, K, alpha, current_q, QC,t2-t1);
+	printPerceptronOutput(output_path, W, K, alpha, current_q, QC, t2 - t1);
 	free(W);
-	
+
 }
 void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time) {
 
 
-	FILE* file=NULL;
+	FILE* file = NULL;
 	fopen_s(&file, path, "w");
 
 	if (q > QC)
 	{
 		printf("Alpha is not found\n");
 		fprintf(file, "Alpha is not found");
-	}		
+	}
 	else
 	{
 		printf("Alpha minimum = %f q=%f\n", alpha, q);
@@ -333,7 +311,30 @@ void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 	}
 
 }
-void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points)
+void sendFirstAlphasToWorld(const double alpha_max, const double alpha_zero, double& alpha, const int world_size, int& num_workers, MPI_Comm comm)
+{
+	//Send first alpha values to hosts
+#pragma omp parallel for
+	for (int dst = 1; dst < world_size; dst++)
+	{
+		if (alpha <= alpha_max) {
+			MPI_Send(&alpha, 1, MPI_DOUBLE, dst, START_TASK_TAG, comm);
+#pragma omp critical
+			{
+				num_workers++;
+			}
+		}
+		alpha += alpha_zero;
+	}
+}
+void sendFinishTagToWorld(int world_size, MPI_Comm comm)
+{
+	double a;
+#pragma omp parallel for
+	for (int dst = 1; dst < world_size; dst++)
+		MPI_Send(&a, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
+}
+void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, Point* points_device)
 {
 	double *W, t1, t2;
 	if (rank == MASTER)
@@ -341,25 +342,13 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	MPI_Status status;
 	char buffer[BUFFER_SIZE];
 	init_W(&W, K);
-	double alpha, returned_alpha, returned_q, q=MAX_QC;
+	double alpha, returned_alpha, returned_q, q = MAX_QC;
 	int position, alpha_found = ALPHA_NOT_FOUND, num_workers = 0;
 
 	if (rank == MASTER) {
 		t1 = omp_get_wtime();
 		alpha = alpha_zero;
-		//Send first alpha values to hosts
-#pragma omp parallel for
-		for (int dst = 1; dst < world_size; dst++)
-		{
-			if (alpha <= alpha_max) {
-				MPI_Send(&alpha, 1, MPI_DOUBLE, dst, START_TASK_TAG, comm);
-				#pragma omp critical
-				{
-					num_workers++;
-				}
-			}
-			alpha += alpha_zero;
-		}
+		sendFirstAlphasToWorld(alpha_max, alpha, alpha_zero, world_size, num_workers, comm);
 
 		//send new alphas to hosts that finish
 		while (num_workers > 0)
@@ -379,9 +368,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 					printf("Alpha found by rank %d\n", status.MPI_SOURCE);
 					printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
 				}
-					
 			}
-			
 			if (alpha <= alpha_max && alpha_found == ALPHA_NOT_FOUND)
 			{
 				MPI_Send(&alpha, 1, MPI_DOUBLE, status.MPI_SOURCE, START_TASK_TAG, comm);
@@ -395,30 +382,60 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 			printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
 		}
 		//send hosts the finish tag
-#pragma omp parallel for
-		for (int dst = 1; dst < world_size; dst++)
-			MPI_Send(&alpha, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
+		sendFinishTagToWorld(world_size, comm);
 	}
 	else //host is not MASTER
 	{
-		while (1) {
-			position = 0;
-			MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
-			if (status.MPI_TAG == FINISH_PROCESS_TAG)
-				break;
-			zero_W(W, K);
-			get_quality_with_alpha_GPU(points, alpha, W, N, K, LIMIT,&q);
-			
-			MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
-			MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
-			MPI_Pack(W, K+1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
-			MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
-		}
+		get_alphas_and_calc_q(buffer, N, K, LIMIT, W, points, points_device, comm);
 		cudaMallocAndFreePointersFromQualityFunction(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 	}
+
 	free(W);
 	if (rank == MASTER)
 		free_alpha_array();
+}
+void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, double *W, Point* points, Point* points_device, MPI_Comm comm) {
+	int position;
+	double alpha, q;
+	MPI_Status status;
+
+	while (1) {
+		position = 0;
+		MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
+		if (status.MPI_TAG == FINISH_PROCESS_TAG)
+			break;
+		zero_W(W, K);
+
+		check_points_and_adjustW(points, W, N, K, LIMIT, alpha);
+
+		get_quality_with_GPU(points_device, W, N, K, &q);
+
+		MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
+		MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
+		MPI_Pack(W, K + 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
+		MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
+	}
+}
+void check_points_and_adjustW(Point *points, double *W, int N, int K, int LIMIT, double alpha)
+{
+	int fault_flag = FAULT;
+	double val;
+
+	for (int loop = 0; loop < LIMIT && fault_flag == FAULT; loop++)
+	{
+		fault_flag = NO_FAULT;
+		//3
+		for (int i = 0; i < N; i++) {
+			val = f(points[i].x, W, K);
+			if (sign(val) != points[i].set)
+			{
+				fault_flag = FAULT;
+				//4
+				adjustW(W, K, points[i].x, val, alpha);
+				break;
+			}
+		}
+	}
 }
 
 int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, double* W, int dim) {
@@ -429,13 +446,13 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 	int index = (int)(((*returned_alpha) / alpha_array[0].value) - 1);
 	alpha_array[index].q = *returned_q;
 	copy_vector(alpha_array[index].W, W, dim);
-	
+
 	//DO NOT USE OpenMP here - order really matters!
 	for (int i = min_index; i < alpha_array_size; i++)
 	{
 		if (alpha_array[index].q == Q_NOT_CHECKED)
 			return alpha_array_state;
-		
+
 		if (alpha_array[index].q <= QC)
 		{
 			*returned_alpha = alpha_array[index].value;

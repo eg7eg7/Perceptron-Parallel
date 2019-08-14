@@ -214,54 +214,23 @@ cudaError_t syncAndCheckErrors(const char* msg)
 	CHECK_ERRORS(cudaStatus, "Cuda sync failed\n", cudaErrorUnknown);
 	return cudaStatus;
 }
-cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, int N, int K, int LIMIT, double* q) {
+cudaError_t get_quality_with_GPU(Point* points, double* W, int N, int K, double* q) {
 	static int *device_results,*sum_results;
 	static double *W_dev, *W_dev_temp;
 
-	int flag_sum_results = W_ADJUSTED;
+	int count;
 	int num_blocks = (int)ceil(N / (double)NUM_CUDA_CORES);
-	double t1, t2;
 	cudaError_t cudaStatus = cudaSuccess;
 	
 	cudaMallocAndFreePointersFromQualityFunction(N,K,num_blocks,&W_dev,&W_dev_temp,&device_results,&sum_results,MALLOC_FLAG);
 
 	memcpyDoubleArrayToDevice(&W_dev, &W, K + 1);
-	t1 = omp_get_wtime();
-	for (int i = 0;i < LIMIT; i++)
-	{
-		
-		//do f on all points
-		fOnGPUKernel <<<num_blocks, NUM_CUDA_CORES>>> (device_results,points, W_dev, N,K);
-		CHECK_AND_SYNC_ERRORS("fOnGPUKernel launch failed\n");
-		//find first point to fail for each block
-		findFirstIncorrectPointInBlockKernel <<<1, num_blocks >>> (device_results, sum_results,N);
-		CHECK_AND_SYNC_ERRORS("sumResultsKernel launch failed\n");
-		//adjust W if fault found, output in sum_results[0]
-		adjustW_with_faulty_point<<<1,1>>>(sum_results, num_blocks, points, W_dev, W_dev_temp, K, alpha);
-		CHECK_AND_SYNC_ERRORS("adjustW_with_faulty_point launch failed\n");
-		cudaMemcpy(&flag_sum_results, &(sum_results[0]), sizeof(int), cudaMemcpyDeviceToHost);
-		if (flag_sum_results == ALL_POINTS_CORRECT)
-			break;
-	}
 	
-	t2 = omp_get_wtime();
+	/*Do f on all points with adjusted W*/
+	fOnGPUKernel <<<num_blocks, NUM_CUDA_CORES >> > (device_results, points, W_dev, N, K);
+	syncAndCheckErrors("fOnGPUKernel launch failed\n");
+	CHECK_AND_SYNC_ERRORS("fOnGPUKernel launch failed\n");
 	
-	memcpyDoubleArrayToHost(&W, &W_dev, K + 1);
-	printf("\nGPU time for alpha %f - %f - W compute\n",alpha,t2-t1);
-
-
-	/*
-	Calculate q
-	*/
-	t1 = omp_get_wtime();
-	
-	if (flag_sum_results == W_ADJUSTED)
-	{
-		/*Do f on all points with adjusted W*/
-		fOnGPUKernel << <num_blocks, NUM_CUDA_CORES >> > (device_results, points, W_dev, N, K);
-		syncAndCheckErrors("fOnGPUKernel launch failed\n");
-		CHECK_AND_SYNC_ERRORS("fOnGPUKernel launch failed\n");
-	}
 
 	/*count number of correct points in each block*/
 	countCorrectPointsKernel <<<1, num_blocks >>> (device_results, sum_results, N);
@@ -270,11 +239,9 @@ cudaError_t get_quality_with_alpha_GPU(Point* points, double alpha, double* W, i
 	sumCountResultsKernel <<<1, 1>> >(sum_results, num_blocks);
 	CHECK_AND_SYNC_ERRORS("adjustW_with_faulty_point launch failed\n");
 
-	int count;
 	cudaStatus = cudaMemcpy(&count, &(sum_results[0]), sizeof(int), cudaMemcpyDeviceToHost);
 	CHECK_ERRORS(cudaStatus, "Cudamemcpy failed\n", cudaErrorUnknown);
+
 	*q = (count / (double) N);
-	t2 = omp_get_wtime();
-	printf("\nGPU time for alpha %f - %f - q compute\n", alpha, t2 - t1);
 	return cudaStatus;
 }
