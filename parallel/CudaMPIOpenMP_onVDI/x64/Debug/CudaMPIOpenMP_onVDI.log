@@ -80,7 +80,7 @@ c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effe
   vectors.cpp
   Perceptron.cpp
 c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\cudampiopenmp_onvdi\perceptron.cpp(210): warning C4101: 'val': unreferenced local variable
-c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\cudampiopenmp_onvdi\perceptron.cpp(413): warning C4101: 'position': unreferenced local variable
+c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\cudampiopenmp_onvdi\perceptron.cpp(416): warning C4101: 'position': unreferenced local variable
   main.cpp
   Generating Code...
   CudaMPIOpenMP_onVDI.vcxproj -> C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug\CudaMPIOpenMP_onVDI.exe

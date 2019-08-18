@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
 	if(rank == 0)
 		printf("\nRunning with max threads = %d\n", max_threads);
 	t1 = omp_get_wtime();
-	Perceptron_readDataset(INPUT_PATH, rank, MPI_COMM_WORLD, &N, &K, &alpha_zero, &alpha_max, &LIMIT, &QC, &points, &dev_points);
+	perceptron_read_dataset(INPUT_PATH, rank, MPI_COMM_WORLD, &N, &K, &alpha_zero, &alpha_max, &LIMIT, &QC, &points, &dev_points);
 	t2 = omp_get_wtime();
 	//printf("\nRank %d read data time - %f seconds\n", rank, t2 - t1);
 	//printf("\nN=%d K=%d alpha zero = %f alpha_max = %f LIMIT=%d QC = %f\n", N, K, alpha_zero, alpha_max, LIMIT, QC);

@@ -29,9 +29,6 @@
 #define ALL_POINTS_CORRECT 1
 #define W_ADJUSTED 2
 
-/* Print result to screen or file*/
-#define PRINT
-
 /* Master host value*/
 #define MASTER 0
 
@@ -75,12 +72,12 @@ int init_W(double** W, int K);
 
 void printPointArray(Point* points, int size, int dim, int rank);
 
-void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time);
+void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC, double time);
 
 void print_arr(double* W, int dim);
 
 /*read dataset and send to host, also copies array to GPU and returns in pointer*/
-void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array, Point** device_point_array);
+void perceptron_read_dataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array, Point** device_point_array);
 
 //************SEQUENTIAL*****************//
 /*multiplies x vector with W vector, taking into account the extra point in vector*/
@@ -97,9 +94,8 @@ int sign(double a);
 
 void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points);
 
-
 /*init point array - sequential*/
-void initPointArray(Point** points, int N, int K);
+void init_point_array(Point** points, int N, int K);
 
 /*free point array sequential*/
 void freePointArray(Point** points, Point** dev_points, int size);
@@ -117,16 +113,16 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 
 void check_points_and_adjustW(Point *points, double *W, double *temp_arr, int N, int K, int LIMIT, double alpha);
 
-void masterDynamicAlphaSending(const int N, const int K, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path);
+void master_dynamic_alpha_sending(const int N, const int K, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path);
 
 void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm);
 
-void sendFirstAlphasToWorld(const double alpha_max, const double alpha_zero, double& alpha, const int world_size, int& num_workers, MPI_Comm comm);
+void send_first_alphas_to_world(const double alpha_max, const double alpha_zero, double& alpha, const int world_size, int& num_workers, MPI_Comm comm);
 
-void sendFinishTagToWorld(int world_size, MPI_Comm comm);
+void send_finish_tag_to_world(int world_size, MPI_Comm comm);
 
-void unpackBuffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm);
+void unpack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm);
 
-void packBuffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm);
+void pack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm);
 
 #endif // !PERCEPTRON

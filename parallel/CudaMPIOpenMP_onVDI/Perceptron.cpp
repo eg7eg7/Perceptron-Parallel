@@ -34,7 +34,7 @@ void fileReadFailure(char* error) {
 	printf("%s\n", error);
 	fileReadFailure();
 }
-void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array, Point** device_point_array) {
+void perceptron_read_dataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array, Point** device_point_array) {
 	const int line_size = 1000;
 	int set;
 	char delim[] = " ";
@@ -105,15 +105,15 @@ void Perceptron_readDataset(const char* path, int rank, MPI_Comm comm, int* N, i
 	MPI_Bcast(alpha_max, 1, MPI_DOUBLE, MASTER, comm);
 	MPI_Bcast(LIMIT, 1, MPI_INT, MASTER, comm);
 	MPI_Bcast(QC, 1, MPI_DOUBLE, MASTER, comm);
-	initPointArray(point_array, *N, *K);
+	init_point_array(point_array, *N, *K);
 
 	int arr_size = (*K + 1);
 	if (rank != MASTER)
 	{
 		temp_point_array = (Point*)malloc(sizeof(Point)*(*N));
 		x_point_array = (double*)malloc(sizeof(double)*arr_size*(*N));
-		cudaMallocDoubleBySize(&dev_x_point_array, (*N)*arr_size);
-		cudaMallocPointBySize(device_point_array, (*N));
+		cuda_malloc_double_by_size(&dev_x_point_array, (*N)*arr_size);
+		cuda_malloc_point_by_size(device_point_array, (*N));
 	}
 
 	for (int i = 0; i < (*N); i++)
@@ -170,7 +170,7 @@ int init_W(double** W, int K) {
 		return 0;
 	return 1;
 }
-void initPointArray(Point** points, int N, int K) {
+void init_point_array(Point** points, int N, int K) {
 	if (N <= 0 || K <= 0)
 	{
 		printf("invalid parameters N=%d and K=%d\n", N, K);
@@ -193,7 +193,7 @@ void freePointArray(Point** points, Point** dev_points, int size) {
 	free(*points);
 
 	if (*dev_points != 0)
-		freeCudaPointArray(dev_points);
+		free_cuda_point_array(dev_points);
 }
 
 void printPointArray(Point* points, int size, int dim, int rank) {
@@ -262,11 +262,11 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 			break;
 	}
 	t2 = omp_get_wtime();
-	printPerceptronOutput(output_path, W, K, alpha, current_q, QC, t2 - t1);
+	print_perceptron_output(output_path, W, K, alpha, current_q, QC, t2 - t1);
 	free(W);
 	free(temp_result);
 }
-void printPerceptronOutput(const char* path, double* W, int K, double alpha, double q, double QC, double time) {
+void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC, double time) {
 
 
 	FILE* file = NULL;
@@ -309,7 +309,7 @@ void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 	}
 
 }
-void sendFirstAlphasToWorld(const double alpha_max, const double alpha_zero, double& alpha, const int world_size, int& num_workers, MPI_Comm comm)
+void send_first_alphas_to_world(const double alpha_max, const double alpha_zero, double& alpha, const int world_size, int& num_workers, MPI_Comm comm)
 {
 	//Send first alpha values to hosts
 #pragma omp parallel for
@@ -325,21 +325,21 @@ void sendFirstAlphasToWorld(const double alpha_max, const double alpha_zero, dou
 		alpha += alpha_zero;
 	}
 }
-void sendFinishTagToWorld(int world_size, MPI_Comm comm)
+void send_finish_tag_to_world(int world_size, MPI_Comm comm)
 {
 	double a;
 #pragma omp parallel for
 	for (int dst = 1; dst < world_size; dst++)
 		MPI_Send(&a, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
 }
-void packBuffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm)
+void pack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm)
 {
 	int position = 0;
 	MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 	MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 	MPI_Pack(W, W_size, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 }
-void unpackBuffer(char* buffer,double& alpha,double& q,double* W,int W_size, const MPI_Comm comm)
+void unpack_buffer(char* buffer,double& alpha,double& q,double* W,int W_size, const MPI_Comm comm)
 {
 	int position = 0;
 	MPI_Unpack(buffer, BUFFER_SIZE, &position, &alpha, 1, MPI_DOUBLE, comm);
@@ -357,7 +357,7 @@ void sendNextAlpha(double& alpha,const double alpha_max,const double alpha_zero,
 	}
 }
 
-void masterDynamicAlphaSending(const int N,const int K,const double alpha_zero,const double alpha_max,const int LIMIT,const double QC,MPI_Comm comm, int world_size, char* buffer, const char* output_path)
+void master_dynamic_alpha_sending(const int N,const int K,const double alpha_zero,const double alpha_max,const int LIMIT,const double QC,MPI_Comm comm, int world_size, char* buffer, const char* output_path)
 {
 	MPI_Status status;
 	double alpha, returned_alpha,returned_q,*W, t1, t2;
@@ -365,7 +365,7 @@ void masterDynamicAlphaSending(const int N,const int K,const double alpha_zero,c
 	init_W(&W, K);
 	init_alpha_array(alpha_max, alpha_zero, K + 1);
 	alpha = alpha_zero;
-	sendFirstAlphasToWorld(alpha_max, alpha_zero,alpha, world_size, num_workers, comm);
+	send_first_alphas_to_world(alpha_max, alpha_zero,alpha, world_size, num_workers, comm);
 	t1 = omp_get_wtime();
 	//send new alphas to hosts that finish
 	while (num_workers > 0)
@@ -374,25 +374,28 @@ void masterDynamicAlphaSending(const int N,const int K,const double alpha_zero,c
 		num_workers--;
 		if (alpha_found_state != ALPHA_FOUND)
 		{
-			unpackBuffer(buffer, returned_alpha, returned_q, W, K + 1, comm);
+			unpack_buffer(buffer, returned_alpha, returned_q, W, K + 1, comm);
 			alpha_found_state = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
 			if (alpha_found_state == ALPHA_FOUND)
 			{
 				t2 = omp_get_wtime();
 				printf("Alpha found by rank %d\n", status.MPI_SOURCE);
-				printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
+				print_perceptron_output(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
+				// not doing break, need to wait for hosts to send their calculations.
 			}
 		}
 		if (alpha_found_state == ALPHA_NOT_FOUND)
 			sendNextAlpha(alpha, alpha_max, alpha_zero, status.MPI_SOURCE, num_workers, comm);
 	}
+
+
 	if (alpha_found_state != ALPHA_FOUND)
 	{
 		t2 = omp_get_wtime();
-		printPerceptronOutput(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
+		print_perceptron_output(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
 	}
 	//send hosts the finish tag
-	sendFinishTagToWorld(world_size, comm);
+	send_finish_tag_to_world(world_size, comm);
 	free_alpha_array();
 	free(W);
 }
@@ -401,12 +404,12 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	char buffer[BUFFER_SIZE];
 	
 	if (rank == MASTER) {
-		masterDynamicAlphaSending(N, K, alpha_zero, alpha_max, LIMIT, QC, comm, world_size, buffer, output_path);
+		master_dynamic_alpha_sending(N, K, alpha_zero, alpha_max, LIMIT, QC, comm, world_size, buffer, output_path);
 	}
 	else //host is not MASTER
 	{
 		get_alphas_and_calc_q(buffer, N, K, LIMIT, points, points_device, comm);
-		cudaMallocAndFreePointersFromQualityFunction(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
+		cuda_malloc_and_free_pointers_from_quality_function(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 	}
 }
 void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm) {
@@ -423,7 +426,7 @@ void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points,
 		zero_W(W, K);
 		check_points_and_adjustW(points, W,temp_result, N, K, LIMIT, alpha);
 		get_quality_with_GPU(points_device, W, N, K, &q);
-		packBuffer(buffer, alpha, q, W, K + 1, comm);
+		pack_buffer(buffer, alpha, q, W, K + 1, comm);
 		MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 	}
 	free(W);
@@ -462,7 +465,7 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 	copy_vector(alpha_array[index].W, W, dim);
 
 	//DO NOT USE OpenMP here - order really matters!
-	for (int i = min_index; i < alpha_array_size; i++)
+	for (int i = min_index; i < alpha_array_size && alpha_array_state == ALPHA_POTENTIALLY_FOUND; i++)
 	{
 		if (alpha_array[index].q == Q_NOT_CHECKED)
 			return alpha_array_state;
