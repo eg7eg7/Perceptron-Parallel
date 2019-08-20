@@ -2,6 +2,7 @@
 #ifndef Perceptron_vectors
 #define Perceptron_vectors
 
+#define _PARALLEL_VECTORS /* This definition allows for vector operations using omp*/
 void mult_scalar_with_vector(double* vector, int dim, double scalar, double* result_vector);
 
 double mult_vector_with_vector(double* vector1, double* vector2, int dim);

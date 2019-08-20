@@ -3,11 +3,11 @@
 #ifndef PERCEPTRON
 #define PERCEPTRON
 #include <mpi.h>
+#include <omp.h>
 #include "vectors.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <omp.h>
 #include <math.h>
 
 /* Point belongs to either set a or set b*/
@@ -49,6 +49,12 @@
 x - array of data for each dimension
 set - point belonging to SET A or SET B
 */
+
+#define PROCESS_WAITING 0
+#define PROCESS_HAS_SOLUTION 1
+#define PROCESS_BUSY 2
+#define FINISH_PROCESS 3
+
 typedef struct struct_point {
 	int set;
 	double* x;
