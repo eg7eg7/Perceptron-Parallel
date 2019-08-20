@@ -2,7 +2,7 @@
 #include "Perceptron.h"
 #include "cudaKernel.h"
 #include <stdlib.h>
-
+#include <Windows.h>
 Alpha* alpha_array;
 int alpha_array_size;
 
@@ -108,13 +108,12 @@ void perceptron_read_dataset(const char* path, int rank, MPI_Comm comm, int* N, 
 	init_point_array(point_array, *N, *K);
 
 	int arr_size = (*K + 1);
-	if (rank != MASTER)
-	{
-		temp_point_array = (Point*)malloc(sizeof(Point)*(*N));
-		x_point_array = (double*)malloc(sizeof(double)*arr_size*(*N));
-		cuda_malloc_double_by_size(&dev_x_point_array, (*N)*arr_size);
-		cuda_malloc_point_by_size(device_point_array, (*N));
-	}
+
+	temp_point_array = (Point*)malloc(sizeof(Point)*(*N));
+	x_point_array = (double*)malloc(sizeof(double)*arr_size*(*N));
+	cuda_malloc_double_by_size(&dev_x_point_array, (*N)*arr_size);
+	cuda_malloc_point_by_size(device_point_array, (*N));
+
 
 	for (int i = 0; i < (*N); i++)
 	{
@@ -138,12 +137,11 @@ void perceptron_read_dataset(const char* path, int rank, MPI_Comm comm, int* N, 
 		}
 		MPI_Bcast((*point_array)[i].x, arr_size, MPI_DOUBLE, MASTER, comm);
 		MPI_Bcast(&(*point_array)[i].set, 1, MPI_INT, MASTER, comm);
-		if (rank != MASTER)
-		{
-			copy_vector(&x_point_array[i*arr_size], (*point_array)[i].x, arr_size);
-			temp_point_array[i].x = dev_x_point_array + i*arr_size;
-			temp_point_array[i].set = (*point_array)[i].set;
-		}
+
+		copy_vector(&x_point_array[i*arr_size], (*point_array)[i].x, arr_size);
+		temp_point_array[i].x = dev_x_point_array + i*arr_size;
+		temp_point_array[i].set = (*point_array)[i].set;
+
 
 	}
 	if (rank == MASTER)
@@ -151,14 +149,11 @@ void perceptron_read_dataset(const char* path, int rank, MPI_Comm comm, int* N, 
 		free(line);
 		fclose(file);
 	}
-	else
-	{
-		memcpyDoubleArrayToDevice(&dev_x_point_array, &x_point_array, (*N)*arr_size);
-		memcpyPointArrayToDevice(device_point_array, &temp_point_array, (*N));
-		free(x_point_array);
-		free(temp_point_array);
-	}
 
+	memcpyDoubleArrayToDevice(&dev_x_point_array, &x_point_array, (*N)*arr_size);
+	memcpyPointArrayToDevice(device_point_array, &temp_point_array, (*N));
+	free(x_point_array);
+	free(temp_point_array);
 
 }
 double f(double* x, double* W, int dim) {
@@ -232,8 +227,7 @@ void adjustW(double* W, double* temp_result, int dim, double* p_xi, double f_p_s
 	add_vector_to_vector(W, temp_result, dim + 1, W);
 }
 void zero_W(double* W, int K) {
-	for (int i = 0; i <= K; i++)
-		W[i] = 0.0;
+	mult_scalar_with_vector(W, K + 1, 0, W);
 }
 void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points) {
 	double  t1, t2, *W, *temp_result, alpha, current_q = MAX_QC;
@@ -320,9 +314,10 @@ void send_first_alphas_to_world(const double alpha_max, const double alpha_zero,
 #pragma omp critical
 			{
 				num_workers++;
+				alpha += alpha_zero;
 			}
 		}
-		alpha += alpha_zero;
+
 	}
 }
 void send_finish_tag_to_world(int world_size, MPI_Comm comm)
@@ -349,20 +344,19 @@ void unpack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size
 
 void sendNextAlpha(double& alpha, const double alpha_max, const double alpha_zero, int dest, int& num_workers, MPI_Comm comm)
 {
-	if (alpha <= alpha_max)
-	{
-		MPI_Send(&alpha, 1, MPI_DOUBLE, dest, START_TASK_TAG, comm);
-		num_workers++;
-		alpha += alpha_zero;
-	}
+	MPI_Send(&alpha, 1, MPI_DOUBLE, dest, START_TASK_TAG, comm);
+	num_workers++;
+	alpha += alpha_zero;
 }
 
-void master_dynamic_alpha_sending(const int N, const int K, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path)
+void master_dynamic_alpha_sending(const int N, const int K, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path, Point* points, Point* points_device)
 {
 	MPI_Status status;
-	double alpha, returned_alpha, returned_q, *W, t1, t2;
-	int num_workers = 0, alpha_found_state = ALPHA_NOT_FOUND;
+	double alpha, alpha_2, q_2, returned_alpha, returned_q, *W, *W_2, *temp_result, t1, t2;
+	int num_workers = 0, alpha_found_state = ALPHA_NOT_FOUND, src, RECEIVED_FLAG;
 	init_W(&W, K);
+	init_W(&W_2, K);
+	init_W(&temp_result, K);
 	init_alpha_array(alpha_max, alpha_zero, K + 1);
 	alpha = alpha_zero;
 	int process_2_flag = PROCESS_WAITING;
@@ -370,28 +364,57 @@ void master_dynamic_alpha_sending(const int N, const int K, const double alpha_z
 	{
 		if (omp_get_thread_num() == 0)
 		{
-			send_first_alphas_to_world(alpha_max, alpha_zero, alpha, world_size, num_workers, comm);
 			t1 = omp_get_wtime();
-			//send new alphas to hosts that finish
-			while (num_workers > 0)
+			send_first_alphas_to_world(alpha_max, alpha_zero, alpha, world_size, num_workers, comm);
+			if (process_2_flag == PROCESS_WAITING)
 			{
-				MPI_Recv(buffer, BUFFER_SIZE, MPI_PACKED, MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &status);
-				num_workers--;
-				if (alpha_found_state != ALPHA_FOUND)
+				alpha_2 = alpha += alpha_zero;
+				process_2_flag = PROCESS_BUSY;
+			}
+			//send new alphas to hosts that finish
+			while (num_workers > 0 || process_2_flag == PROCESS_BUSY)
+			{
+				RECEIVED_FLAG = 0;
+				if (process_2_flag == PROCESS_HAS_SOLUTION)
 				{
-					unpack_buffer(buffer, returned_alpha, returned_q, W, K + 1, comm);
+					returned_alpha = alpha_2;
+					returned_q = q_2;
+					copy_vector(W, W_2, K + 1);
+					process_2_flag = PROCESS_WAITING;
+					src = MASTER;
+					RECEIVED_FLAG = 1;
+				}
+				else if (num_workers > 0)
+				{
+					MPI_Recv(buffer, BUFFER_SIZE, MPI_PACKED, MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &status);
+					src = status.MPI_SOURCE;
+					if (alpha_found_state != ALPHA_FOUND)
+						unpack_buffer(buffer, returned_alpha, returned_q, W, K + 1, comm);
+					--num_workers;
+					RECEIVED_FLAG = 1;
+				}
+				if (alpha_found_state != ALPHA_FOUND && RECEIVED_FLAG)
+				{
 					alpha_found_state = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
 					if (alpha_found_state == ALPHA_FOUND)
 					{
-						t2 = omp_get_wtime();
-						printf("Alpha found by rank %d\n", status.MPI_SOURCE);
-						print_perceptron_output(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
 						// not doing break, need to wait for hosts to send their calculations.
+						t2 = omp_get_wtime();
+						printf("Alpha found by rank %d\n", src);
+						print_perceptron_output(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
+
 					}
 				}
-				if (alpha_found_state == ALPHA_NOT_FOUND)
-					
-					sendNextAlpha(alpha, alpha_max, alpha_zero, status.MPI_SOURCE, num_workers, comm);
+				//send new alpha
+				if (alpha_found_state == ALPHA_NOT_FOUND && alpha <= alpha_max) {
+					if (process_2_flag == PROCESS_WAITING)
+					{
+						alpha_2 = alpha += alpha_zero;
+						process_2_flag = PROCESS_BUSY;
+					}
+					else if (world_size > 1)
+						sendNextAlpha(alpha, alpha_max, alpha_zero, status.MPI_SOURCE, num_workers, comm);
+				}
 			}
 
 			if (alpha_found_state != ALPHA_FOUND)
@@ -401,43 +424,31 @@ void master_dynamic_alpha_sending(const int N, const int K, const double alpha_z
 			}
 			//send hosts the finish tag
 			send_finish_tag_to_world(world_size, comm);
+			process_2_flag = FINISH_PROCESS;
 		}
 		else // PROCESS 2, aid with alpha
 		{
-			while (1)
+			while (process_2_flag != FINISH_PROCESS)
 			{
-				if (process_2_flag == FINISH_PROCESS)
-					break;
-
+				if (process_2_flag == PROCESS_BUSY)
+				{
+					//DO WORK on alpha_2
+					printf("\nprocess 2 got alpha %f\n ", alpha_2);
+					zero_W(W_2, K);
+					q_2 = 1;
+					//check_points_and_adjustW(points, W_2, temp_result, N, K, LIMIT, alpha_2);
+					//get_quality_with_GPU(points_device, W_2, N, K, &q_2);
+					process_2_flag = PROCESS_HAS_SOLUTION;
+				}
 			}
 		}
 	}
 	free_alpha_array();
 	free(W);
-
-}
-
-
-void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm) {
-	int position;
-	double alpha, q, *W, *temp_result;
-	MPI_Status status;
-	init_W(&W, K);
-	init_W(&temp_result, K);
-
-	while (1) {
-		MPI_Recv(&alpha, 1, MPI_DOUBLE, MASTER, MPI_ANY_TAG, comm, &status);
-		if (status.MPI_TAG == FINISH_PROCESS_TAG)
-			break;
-		zero_W(W, K);
-		check_points_and_adjustW(points, W, temp_result, N, K, LIMIT, alpha);
-		get_quality_with_GPU(points_device, W, N, K, &q);
-		pack_buffer(buffer, alpha, q, W, K + 1, comm);
-		MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
-	}
-	free(W);
+	free(W_2);
 	free(temp_result);
 }
+
 
 
 void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, Point* points_device)
@@ -445,7 +456,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	char buffer[BUFFER_SIZE];
 
 	if (rank == MASTER) {
-		master_dynamic_alpha_sending(N, K, alpha_zero, alpha_max, LIMIT, QC, comm, world_size, buffer, output_path);
+		master_dynamic_alpha_sending(N, K, alpha_zero, alpha_max, LIMIT, QC, comm, world_size, buffer, output_path, points, points_device);
 	}
 	else //host is not MASTER
 	{
@@ -454,7 +465,6 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	}
 }
 void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm) {
-	int position;
 	double alpha, q, *W, *temp_result;
 	MPI_Status status;
 	init_W(&W, K);
@@ -499,12 +509,13 @@ void check_points_and_adjustW(Point *points, double *W, double *temp_arr, int N,
 int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, double* W, int dim) {
 	static int alpha_array_state = ALPHA_NOT_FOUND;
 	static int min_index = 0;
+
 	if (*returned_q <= QC)
 		alpha_array_state = ALPHA_POTENTIALLY_FOUND;
 	int index = (int)(((*returned_alpha) / alpha_array[0].value) - 1);
 	alpha_array[index].q = *returned_q;
-	copy_vector(alpha_array[index].W, W, dim);
 
+	copy_vector(alpha_array[index].W, W, dim);
 	//DO NOT USE OpenMP here - order really matters!
 	for (int i = min_index; i < alpha_array_size && alpha_array_state == ALPHA_POTENTIALLY_FOUND; i++)
 	{

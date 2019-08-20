@@ -16,28 +16,29 @@ int main(int argc, char *argv[])
 	Point* dev_points = 0;
 	Point* points = 0;
 	omp_set_nested(true);
-
-	//if (size < 2)
-	//{
-	//	omp_set_num_threads(1);
-	//}
-	int max_threads = omp_get_max_threads();
-	if(rank == 0)
-		printf("\nRunning with max threads = %d\n", max_threads);
+	int num_threads = omp_get_max_threads();
 	t1 = omp_get_wtime();
 	perceptron_read_dataset(INPUT_PATH, rank, MPI_COMM_WORLD, &N, &K, &alpha_zero, &alpha_max, &LIMIT, &QC, &points, &dev_points);
 	t2 = omp_get_wtime();
-	//printf("\nRank %d read data time - %f seconds\n", rank, t2 - t1);
-	//printf("\nN=%d K=%d alpha zero = %f alpha_max = %f LIMIT=%d QC = %f\n", N, K, alpha_zero, alpha_max, LIMIT, QC);
-
-	//if (size < 2)
-	//	run_perceptron_sequential(OUTPUT_PATH, N, K, alpha_zero, alpha_max, LIMIT, QC, points);
-	//else
-		run_perceptron_parallel(OUTPUT_PATH, rank, size, MPI_COMM_WORLD, N, K, alpha_zero, alpha_max, LIMIT, QC, points,dev_points);
 	
-	freePointArray(&points,&dev_points, N);
+	double read_data_time = t2 - t1;
+	printf("num threads %d", num_threads);
+	if (size > 1 || num_threads > 1)
+	{
+		run_perceptron_parallel(OUTPUT_PATH, rank, size, MPI_COMM_WORLD, N, K, alpha_zero, alpha_max, LIMIT, QC, points, dev_points);
+	}
+		
+	if (rank == MASTER)
+	{
+		t1 = omp_get_wtime();
+		//omp_set_num_threads(1);
+		//	run_perceptron_sequential(OUTPUT_PATH, N, K, alpha_zero, alpha_max, LIMIT, QC, points);
+		t2 = omp_get_wtime();
+	}
+	printf("\n\nEnd of program.\nRank %d read data time - %f seconds\n", rank, read_data_time);
+	freePointArray(&points, &dev_points, N);
 
-	
+
 	MPI_Finalize();
 	return 0;
 
