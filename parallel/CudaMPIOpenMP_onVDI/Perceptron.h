@@ -2,14 +2,14 @@
 #pragma warning( disable : 4996)
 #ifndef PERCEPTRON
 #define PERCEPTRON
-#include <mpi.h>
+
 #include <omp.h>
 #include "vectors.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-
+#include <mpi.h>
 /* Point belongs to either set a or set b*/
 #define SET_A 1
 #define SET_B -1
@@ -45,19 +45,22 @@
 /* buffer for MPI packages - max package size*/
 #define BUFFER_SIZE 1000
 
-/*
-x - array of data for each dimension
-set - point belonging to SET A or SET B
-*/
 
+
+/* States for second process in master host */
 #define PROCESS_WAITING 0
 #define PROCESS_HAS_SOLUTION 1
 #define PROCESS_BUSY 2
 #define FINISH_PROCESS 3
 
+/* States for flags in master host*/
 #define NO_SOLUTION 0
 #define HAVE_SOLUTION 1
 
+/*
+x - array of data for each dimension
+set - point belonging to SET A or SET B
+*/
 typedef struct struct_point {
 	int set;
 	double* x;
@@ -81,9 +84,9 @@ int init_W(double** W, int K);
 
 void printPointArray(Point* points, int size, int dim, int rank);
 
-void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC, double time);
+void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC);
 
-void print_arr(double* W, int dim);
+void print_array(double* W, int dim);
 
 /*read dataset and send to host, also copies array to GPU and returns in pointer*/
 void perceptron_read_dataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array, Point** device_point_array);
@@ -96,7 +99,7 @@ double f(double* x, double* W, int dim);
 double get_quality(Point* points, double* W, int N, int K);
 
 /*adjust W vector accoring to alpha and value - sequential */
-void adjustW(double* W,double* temp_result, int dim, double* p_xi, double f_p_scalar, double alpha);
+void adjustW(double* W, double* temp_result, int dim, double* p_xi, double f_p_scalar, double alpha);
 
 /*if positive return SET A, else returns SET B*/
 int sign(double a);
@@ -111,47 +114,38 @@ void freePointArray(Point** points, Point** dev_points, int size);
 //**********PARALLEL************//
 
 /*responsible for allocation next alpha for second process in master*/
-<<<<<<< HEAD
-<<<<<<< HEAD
 int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, double& alpha_zero, double* W, int K);
-=======
-int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, const double& alpha_zero);
->>>>>>> parent of c00690c... reliable
-=======
-int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, const double& alpha_zero, double* W, const int K);
->>>>>>> parent of 10f9ebb... refactoring and comments
 
 /*free global alpha array*/
 void free_alpha_array();
 
 /*malloc the global array with the amount of alphas possible*/
 void init_alpha_array(double alpha_max, double alpha_zero, int dim);
+
 /*Helper function for Master host, decides whether alpha is found or not*/
 int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, double* W, int dim);
 
 /*main function to run perceptron in parallel, both master and slaves*/
 void run_perceptron_parallel(const char* output_path, int rank, int world_size, MPI_Comm comm, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points, Point* points_device);
 
+/* Sequentially checking points and readjusts W according to the algorithm*/
 void check_points_and_adjustW(Point *points, double *W, double *temp_arr, int N, int K, int LIMIT, double alpha);
 
-void master_dynamic_alpha_sending(const int N, const int K, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path, Point* points, Point* points_device);
+/* Responsible for dynamic algorithm for master */
+void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path, Point* points, Point* points_device);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 /* Slave host loop to get alphas and calculate */
-=======
->>>>>>> parent of 10f9ebb... refactoring and comments
 void get_alphas_and_calc_q(int rank, char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm);
-=======
-void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm);
->>>>>>> parent of c00690c... reliable
 
-void send_first_alphas_to_world(const double alpha_max, const double alpha_zero, double& alpha, const int world_size, int& num_workers, MPI_Comm comm);
+/* sends alphas from beginning from destination 1*/
+void send_first_alphas_to_world(double alpha_max, double alpha_zero, double& alpha, int world_size, int& num_workers, MPI_Comm comm);
 
+/* Lets slave process know when to finish*/
 void send_finish_tag_to_world(int world_size, MPI_Comm comm);
 
-void unpack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm);
+/* Used for MPI send and receive packs of data*/
+void unpack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, MPI_Comm comm);
 
-void pack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm);
+void pack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, MPI_Comm comm);
 
 #endif // !PERCEPTRON
