@@ -2,7 +2,7 @@
 #include "Perceptron.h"
 #include "cudaKernel.h"
 #include <stdlib.h>
-#include <Windows.h>
+
 Alpha* alpha_array;
 int alpha_array_size;
 
@@ -203,7 +203,6 @@ void printPointArray(Point* points, int size, int dim, int rank) {
 double get_quality(Point* points, double* W, int N, int K) {
 	int N_mis = 0;
 	double val;
-#pragma omp parallel for private(val) reduction(+:N_mis)
 	for (int i = 0; i < N; i++) {
 		val = f(points[i].x, W, K);
 		if (sign(val) != points[i].set)
@@ -222,7 +221,6 @@ int sign(double a)
 		return SET_B;
 }
 void adjustW(double* W, double* temp_result, int dim, double* p_xi, double f_p_scalar, double alpha) {
-
 	mult_scalar_with_vector(p_xi, dim + 1, alpha*(-sign(f_p_scalar)), temp_result);
 	add_vector_to_vector(W, temp_result, dim + 1, W);
 }
@@ -348,70 +346,84 @@ void sendNextAlpha(double& alpha, const double alpha_max, const double alpha_zer
 	num_workers++;
 	alpha += alpha_zero;
 }
-
+int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, const double& alpha_zero)
+{
+	int status;
+	omp_set_lock(&lock);
+	if ((status = PROCESS_2_STATUS_SHARED) == PROCESS_WAITING)
+	{
+		alpha_2 = alpha += alpha_zero;
+		status = PROCESS_2_STATUS_SHARED = PROCESS_BUSY;
+	}
+	omp_unset_lock(&lock);
+	return status;
+}
 void master_dynamic_alpha_sending(const int N, const int K, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path, Point* points, Point* points_device)
 {
 	MPI_Status status;
 	double alpha, alpha_2, q_2, returned_alpha, returned_q, *W, *W_2, *temp_result, t1, t2;
-	int num_workers = 0, alpha_found_state = ALPHA_NOT_FOUND, src, RECEIVED_FLAG;
+	int num_workers = 0, alpha_found_state = ALPHA_NOT_FOUND, data_src, RECEIVED_SOLUTION_FLAG = NO_SOLUTION;
 	init_W(&W, K);
 	init_W(&W_2, K);
 	init_W(&temp_result, K);
 	init_alpha_array(alpha_max, alpha_zero, K + 1);
 	alpha = alpha_zero;
-	int process_2_flag = PROCESS_WAITING;
-#pragma omp parallel num_threads(2)
+	int PROCESS_2_STATUS_SHARED = PROCESS_WAITING;
+	int PROCESS_2_STATUS_PRIVATE = PROCESS_WAITING;
+	omp_lock_t lock;
+	omp_init_lock(&lock);
+#pragma omp parallel num_threads(2) shared(lock,PROCESS_2_STATUS_SHARED, q_2,alpha_2,W_2) private(PROCESS_2_STATUS_PRIVATE)
 	{
 		if (omp_get_thread_num() == 0)
 		{
 			t1 = omp_get_wtime();
+			PROCESS_2_STATUS_PRIVATE = send_alpha_to_second_process(lock, PROCESS_2_STATUS_SHARED, alpha_2, alpha, alpha_zero);
 			send_first_alphas_to_world(alpha_max, alpha_zero, alpha, world_size, num_workers, comm);
-			if (process_2_flag == PROCESS_WAITING)
-			{
-				alpha_2 = alpha += alpha_zero;
-				process_2_flag = PROCESS_BUSY;
-			}
+
 			//send new alphas to hosts that finish
-			while (num_workers > 0 || process_2_flag == PROCESS_BUSY)
+			while (num_workers > 0 || PROCESS_2_STATUS_SHARED == PROCESS_BUSY)
 			{
-				RECEIVED_FLAG = 0;
-				if (process_2_flag == PROCESS_HAS_SOLUTION)
+				omp_set_lock(&lock);
+				PROCESS_2_STATUS_PRIVATE = PROCESS_2_STATUS_SHARED;
+
+				if (PROCESS_2_STATUS_PRIVATE != PROCESS_HAS_SOLUTION)
+					omp_unset_lock(&lock);
+				if (PROCESS_2_STATUS_PRIVATE == PROCESS_HAS_SOLUTION)
 				{
 					returned_alpha = alpha_2;
 					returned_q = q_2;
 					copy_vector(W, W_2, K + 1);
-					process_2_flag = PROCESS_WAITING;
-					src = MASTER;
-					RECEIVED_FLAG = 1;
+					PROCESS_2_STATUS_PRIVATE = PROCESS_2_STATUS_SHARED = PROCESS_WAITING;
+					omp_unset_lock(&lock);
+					data_src = MASTER;
+					RECEIVED_SOLUTION_FLAG = 1;
 				}
 				else if (num_workers > 0)
 				{
 					MPI_Recv(buffer, BUFFER_SIZE, MPI_PACKED, MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &status);
-					src = status.MPI_SOURCE;
+					data_src = status.MPI_SOURCE;
 					if (alpha_found_state != ALPHA_FOUND)
 						unpack_buffer(buffer, returned_alpha, returned_q, W, K + 1, comm);
 					--num_workers;
-					RECEIVED_FLAG = 1;
+					RECEIVED_SOLUTION_FLAG = 1;
 				}
-				if (alpha_found_state != ALPHA_FOUND && RECEIVED_FLAG)
+				if (alpha_found_state != ALPHA_FOUND && RECEIVED_SOLUTION_FLAG == HAVE_SOLUTION)
 				{
 					alpha_found_state = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
 					if (alpha_found_state == ALPHA_FOUND)
 					{
 						// not doing break, need to wait for hosts to send their calculations.
 						t2 = omp_get_wtime();
-						printf("Alpha found by rank %d\n", src);
+						printf("Alpha found by rank %d\n", data_src);
 						print_perceptron_output(output_path, W, K, returned_alpha, returned_q, QC, t2 - t1);
 
 					}
+					RECEIVED_SOLUTION_FLAG = NO_SOLUTION;
 				}
 				//send new alpha
 				if (alpha_found_state == ALPHA_NOT_FOUND && alpha <= alpha_max) {
-					if (process_2_flag == PROCESS_WAITING)
-					{
-						alpha_2 = alpha += alpha_zero;
-						process_2_flag = PROCESS_BUSY;
-					}
+					if (data_src == MASTER)
+						send_alpha_to_second_process(lock, PROCESS_2_STATUS_SHARED, alpha_2, alpha, alpha_zero);
 					else if (world_size > 1)
 						sendNextAlpha(alpha, alpha_max, alpha_zero, status.MPI_SOURCE, num_workers, comm);
 				}
@@ -424,21 +436,31 @@ void master_dynamic_alpha_sending(const int N, const int K, const double alpha_z
 			}
 			//send hosts the finish tag
 			send_finish_tag_to_world(world_size, comm);
-			process_2_flag = FINISH_PROCESS;
+			omp_set_lock(&lock);
+			PROCESS_2_STATUS_SHARED = FINISH_PROCESS;
+			omp_unset_lock(&lock);
 		}
 		else // PROCESS 2, aid with alpha
 		{
-			while (process_2_flag != FINISH_PROCESS)
+			int set_solution;
+			while (PROCESS_2_STATUS_SHARED != FINISH_PROCESS)
 			{
-				if (process_2_flag == PROCESS_BUSY)
+				set_solution = 0;
+				if (PROCESS_2_STATUS_SHARED == PROCESS_BUSY)
 				{
-					//DO WORK on alpha_2
-					printf("\nprocess 2 got alpha %f\n ", alpha_2);
 					zero_W(W_2, K);
-					q_2 = 1;
-					//check_points_and_adjustW(points, W_2, temp_result, N, K, LIMIT, alpha_2);
-					//get_quality_with_GPU(points_device, W_2, N, K, &q_2);
-					process_2_flag = PROCESS_HAS_SOLUTION;
+					check_points_and_adjustW(points, W_2, temp_result, N, K, LIMIT, alpha_2);
+					get_quality_with_GPU(points_device, W_2, N, K, &q_2);
+					omp_set_lock(&lock);
+					PROCESS_2_STATUS_PRIVATE = PROCESS_2_STATUS_SHARED = PROCESS_HAS_SOLUTION;
+					set_solution = 1;
+					omp_unset_lock(&lock);
+				}
+				if (!set_solution)
+				{
+					omp_set_lock(&lock);
+					PROCESS_2_STATUS_PRIVATE = PROCESS_2_STATUS_SHARED;
+					omp_unset_lock(&lock);
 				}
 			}
 		}
@@ -447,6 +469,7 @@ void master_dynamic_alpha_sending(const int N, const int K, const double alpha_z
 	free(W);
 	free(W_2);
 	free(temp_result);
+	omp_destroy_lock(&lock);
 }
 
 

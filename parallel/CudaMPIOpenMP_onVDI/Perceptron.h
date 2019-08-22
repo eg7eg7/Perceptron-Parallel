@@ -55,6 +55,9 @@ set - point belonging to SET A or SET B
 #define PROCESS_BUSY 2
 #define FINISH_PROCESS 3
 
+#define NO_SOLUTION 0
+#define HAVE_SOLUTION 1
+
 typedef struct struct_point {
 	int set;
 	double* x;
@@ -106,6 +109,10 @@ void init_point_array(Point** points, int N, int K);
 /*free point array sequential*/
 void freePointArray(Point** points, Point** dev_points, int size);
 //**********PARALLEL************//
+
+/*responsible for allocation next alpha for second process in master*/
+int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, const double& alpha_zero);
+
 /*free global alpha array*/
 void free_alpha_array();
 

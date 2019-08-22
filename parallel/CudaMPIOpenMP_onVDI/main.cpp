@@ -17,6 +17,8 @@ int main(int argc, char *argv[])
 	Point* points = 0;
 	omp_set_nested(true);
 	int num_threads = omp_get_max_threads();
+
+
 	t1 = omp_get_wtime();
 	perceptron_read_dataset(INPUT_PATH, rank, MPI_COMM_WORLD, &N, &K, &alpha_zero, &alpha_max, &LIMIT, &QC, &points, &dev_points);
 	t2 = omp_get_wtime();
