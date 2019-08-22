@@ -84,7 +84,7 @@ int init_W(double** W, int K);
 
 void printPointArray(Point* points, int size, int dim, int rank);
 
-void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC);
+void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC, double time);
 
 void print_array(double* W, int dim);
 
@@ -114,7 +114,11 @@ void freePointArray(Point** points, Point** dev_points, int size);
 //**********PARALLEL************//
 
 /*responsible for allocation next alpha for second process in master*/
+<<<<<<< HEAD
 int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, double& alpha_zero, double* W, int K);
+=======
+int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, const double& alpha_zero);
+>>>>>>> parent of c00690c... reliable
 
 /*free global alpha array*/
 void free_alpha_array();
@@ -134,8 +138,12 @@ void check_points_and_adjustW(Point *points, double *W, double *temp_arr, int N,
 /* Responsible for dynamic algorithm for master */
 void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path, Point* points, Point* points_device);
 
+<<<<<<< HEAD
 /* Slave host loop to get alphas and calculate */
 void get_alphas_and_calc_q(int rank, char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm);
+=======
+void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm);
+>>>>>>> parent of c00690c... reliable
 
 /* sends alphas from beginning from destination 1*/
 void send_first_alphas_to_world(double alpha_max, double alpha_zero, double& alpha, int world_size, int& num_workers, MPI_Comm comm);
