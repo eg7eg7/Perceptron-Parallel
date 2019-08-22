@@ -35,15 +35,6 @@ void fileReadFailure(char* error) {
 	fileReadFailure();
 }
 void perceptron_read_dataset(const char* path, int rank, MPI_Comm comm, int* N, int* K, double* alpha_zero, double* alpha_max, int* LIMIT, double* QC, Point** point_array, Point** device_point_array) {
-	/* Read order : N_K_ALPHA_ZERO_ALPHA_MAX_LIMIT_QC
-				N1 -K1 K2 K3 ... G
-				N2 -K1 K2 K3 ... G
-				N3 -K1 K2 K3 ... G
-				 .
-				 .
-				 .
-				where G is 1 or -1					*/
-
 	const int line_size = 1000;
 	int set;
 	char delim[] = " ";
@@ -159,8 +150,8 @@ void perceptron_read_dataset(const char* path, int rank, MPI_Comm comm, int* N, 
 		fclose(file);
 	}
 
-	memcpy_double_array_to_device(&dev_x_point_array, &x_point_array, (*N)*arr_size);
-	memcpy_point_array_to_device(device_point_array, &temp_point_array, (*N));
+	memcpyDoubleArrayToDevice(&dev_x_point_array, &x_point_array, (*N)*arr_size);
+	memcpyPointArrayToDevice(device_point_array, &temp_point_array, (*N));
 	free(x_point_array);
 	free(temp_point_array);
 
@@ -281,7 +272,7 @@ void print_perceptron_output(const char* path, double* W, int K, double alpha, d
 	else
 	{
 		printf("Alpha minimum = %f q=%f\n", alpha, q);
-		print_array(W, K + 1);
+		print_arr(W, K + 1);
 		fprintf(file, "Alpha minimum = %f q=%f\n", alpha, q);
 		for (int i = 0; i <= K; i++)
 			fprintf(file, "%f\n", W[i]);
@@ -310,7 +301,7 @@ void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 	}
 
 }
-void send_first_alphas_to_world(double alpha_max, double alpha_zero, double& alpha, int world_size, int& num_workers, MPI_Comm comm)
+void send_first_alphas_to_world(const double alpha_max, const double alpha_zero, double& alpha, const int world_size, int& num_workers, MPI_Comm comm)
 {
 	//Send first alpha values to hosts
 #pragma omp parallel for
@@ -334,14 +325,14 @@ void send_finish_tag_to_world(int world_size, MPI_Comm comm)
 	for (int dst = 1; dst < world_size; dst++)
 		MPI_Send(&a, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
 }
-void pack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, MPI_Comm comm)
+void pack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm)
 {
 	int position = 0;
 	MPI_Pack(&alpha, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 	MPI_Pack(&q, 1, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 	MPI_Pack(W, W_size, MPI_DOUBLE, buffer, BUFFER_SIZE, &position, comm);
 }
-void unpack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, MPI_Comm comm)
+void unpack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, const MPI_Comm comm)
 {
 	int position = 0;
 	MPI_Unpack(buffer, BUFFER_SIZE, &position, &alpha, 1, MPI_DOUBLE, comm);
@@ -349,17 +340,21 @@ void unpack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size
 	MPI_Unpack(buffer, BUFFER_SIZE, &position, W, W_size, MPI_DOUBLE, comm);
 }
 
-void sendNextAlpha(double& alpha, double alpha_max, double alpha_zero, int dest, int& num_workers, MPI_Comm comm)
+void sendNextAlpha(double& alpha, const double alpha_max, const double alpha_zero, int dest, int& num_workers, MPI_Comm comm)
 {
 	MPI_Send(&alpha, 1, MPI_DOUBLE, dest, START_TASK_TAG, comm);
 	num_workers++;
 	alpha += alpha_zero;
 }
 <<<<<<< HEAD
+<<<<<<< HEAD
 int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, double& alpha_zero, double* W, int K)
 =======
 int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, const double& alpha_zero)
 >>>>>>> parent of c00690c... reliable
+=======
+int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, const double& alpha_zero, double* W, const int K)
+>>>>>>> parent of 10f9ebb... refactoring and comments
 {
 	int status;
 	omp_set_lock(&lock);
@@ -381,10 +376,14 @@ int get_value_thread_safe(omp_lock_t& lock, int& var)
 	omp_unset_lock(&lock);
 	return val;
 }
+<<<<<<< HEAD
 void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path, Point* points, Point* points_device)
 =======
 void master_dynamic_alpha_sending(const int N, const int K, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path, Point* points, Point* points_device)
 >>>>>>> parent of c00690c... reliable
+=======
+void master_dynamic_alpha_sending(const int N, const int K, const double alpha_zero, const double alpha_max, const int LIMIT, const double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path, Point* points, Point* points_device)
+>>>>>>> parent of 10f9ebb... refactoring and comments
 {
 	MPI_Status status;
 	double alpha, alpha_2, q_2, returned_alpha, returned_q, *W, *W_2, *temp_result, t1, t2;
@@ -435,6 +434,8 @@ void master_dynamic_alpha_sending(const int N, const int K, const double alpha_z
 				}
 				if (alpha_found_state != ALPHA_FOUND && RECEIVED_SOLUTION_FLAG == HAVE_SOLUTION)
 				{
+					printf("received alpha %f, q=%f solution from %d W[0] is %f\n", returned_alpha, returned_q, data_src, W[0]);
+
 					alpha_found_state = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
 					if (alpha_found_state == ALPHA_FOUND)
 					{
@@ -476,9 +477,13 @@ void master_dynamic_alpha_sending(const int N, const int K, const double alpha_z
 				{
 <<<<<<< HEAD
 					omp_set_lock(&var_lock);
+<<<<<<< HEAD
 =======
 					zero_W(W_2, K);
 >>>>>>> parent of c00690c... reliable
+=======
+					printf("MASTER receive alpha %f\n", alpha_2);
+>>>>>>> parent of 10f9ebb... refactoring and comments
 					check_points_and_adjustW(points, W_2, temp_result, N, K, LIMIT, alpha_2);
 					get_quality_with_GPU(points_device, W_2, N, K, &q_2);
 					omp_set_lock(&lock);
@@ -488,8 +493,14 @@ void master_dynamic_alpha_sending(const int N, const int K, const double alpha_z
 				}
 				if (!set_solution)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+				{
+>>>>>>> parent of 10f9ebb... refactoring and comments
 					PROCESS_2_STATUS_PRIVATE = get_value_thread_safe(lock, PROCESS_2_STATUS_SHARED);
+				}
 			}
+<<<<<<< HEAD
 			cuda_malloc_and_free_pointers_from_quality_function(0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 =======
 				{
@@ -499,6 +510,9 @@ void master_dynamic_alpha_sending(const int N, const int K, const double alpha_z
 				}
 			}
 >>>>>>> parent of c00690c... reliable
+=======
+			cuda_malloc_and_free_pointers_from_quality_function(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
+>>>>>>> parent of 10f9ebb... refactoring and comments
 		}
 	}
 	free_alpha_array();
@@ -521,11 +535,15 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	{
 <<<<<<< HEAD
 		get_alphas_and_calc_q(rank, buffer, N, K, LIMIT, points, points_device, comm);
+<<<<<<< HEAD
 		cuda_malloc_and_free_pointers_from_quality_function(0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 =======
 		get_alphas_and_calc_q(buffer, N, K, LIMIT, points, points_device, comm);
 		cuda_malloc_and_free_pointers_from_quality_function(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 >>>>>>> parent of c00690c... reliable
+=======
+		cuda_malloc_and_free_pointers_from_quality_function(0, 0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
+>>>>>>> parent of 10f9ebb... refactoring and comments
 	}
 }
 void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm) {
@@ -541,6 +559,7 @@ void get_alphas_and_calc_q(char* buffer, int N, int K, int LIMIT, Point* points,
 		zero_W(W, K);
 		check_points_and_adjustW(points, W, temp_result, N, K, LIMIT, alpha);
 		get_quality_with_GPU(points_device, W, N, K, &q);
+		printf("rank %d receive alpha %f and return %f\n", rank, alpha, q);
 		pack_buffer(buffer, alpha, q, W, K + 1, comm);
 		MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 	}
@@ -581,7 +600,8 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 <<<<<<< HEAD
 	copy_vector(alpha_array[index].W, W, dim);
 
-	//order really matters! - no omp
+	//order really matters!
+
 	for (int i = min_index; i < alpha_array_size; i++)
 =======
 
@@ -590,6 +610,8 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 	for (int i = min_index; i < alpha_array_size && alpha_array_state == ALPHA_POTENTIALLY_FOUND; i++)
 >>>>>>> parent of c00690c... reliable
 	{
+
+		printf("num workers %d\n", omp_get_num_threads());
 		if (alpha_array[index].q == Q_NOT_CHECKED)
 			return alpha_array_state;
 
@@ -599,19 +621,24 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 			*returned_q = alpha_array[index].q;
 			copy_vector(W, alpha_array[index].W, dim);
 			alpha_array_state = ALPHA_FOUND;
+			printf("my index=%d ,alpha %f is found correct - return %d\n", index, *returned_alpha, alpha_array_state);
 			return alpha_array_state;
 		}
 		min_index = i;
 <<<<<<< HEAD
 
+<<<<<<< HEAD
 =======
 >>>>>>> parent of c00690c... reliable
 	}
+=======
+		}
+>>>>>>> parent of 10f9ebb... refactoring and comments
 	return alpha_array_state;
 }
 
 
-void print_array(double* W, int dim) {
+void print_arr(double* W, int dim) {
 	for (int i = 0; i < dim; i++)
 		printf("%f\n", W[i]);
 }
