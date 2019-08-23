@@ -31,15 +31,14 @@ int main(int argc, char *argv[])
 		run_perceptron_parallel(OUTPUT_PATH, rank, size, MPI_COMM_WORLD, N, K, alpha_zero, alpha_max, LIMIT, QC, points, dev_points);
 	}
 
+	/* Optional - run sequential */
 	if (rank == MASTER)
 	{
-		printf("\n\nBegin serial Algorithm (%d Max Thread, %d World size)\n", 1, 1);
-		omp_set_num_threads(1);
-		t1 = omp_get_wtime();
-		run_perceptron_sequential(OUTPUT_PATH, N, K, alpha_zero, alpha_max, LIMIT, QC, points);
-		t2 = omp_get_wtime();
-		printf("Total serial time %f", t2 - t1);
+		//("\n\nBegin serial Algorithm (%d Max Thread, %d World size)\n", 1, 1);
+		//omp_set_num_threads(1);
+		//run_perceptron_sequential(OUTPUT_PATH, N, K, alpha_zero, alpha_max, LIMIT, QC, points);
 	}
+
 	printf("\n\nEnd of program - Rank %d\n", rank);
 	freePointArray(&points, &dev_points, N);
 	if (rank == MASTER)

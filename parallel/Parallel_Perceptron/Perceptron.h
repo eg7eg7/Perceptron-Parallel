@@ -84,7 +84,7 @@ int init_W(double** W, int K);
 
 void printPointArray(Point* points, int size, int dim, int rank);
 
-void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC);
+void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC, double time);
 
 void print_array(double* W, int dim);
 
@@ -114,7 +114,7 @@ void freePointArray(Point** points, Point** dev_points, int size);
 //**********PARALLEL************//
 
 /*responsible for allocation next alpha for second process in master*/
-int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, double& alpha_zero, double* W, int K);
+int send_alpha_to_second_process(omp_lock_t& lock, omp_lock_t& var_lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, double& alpha_zero, double* W, int K);
 
 /*free global alpha array*/
 void free_alpha_array();

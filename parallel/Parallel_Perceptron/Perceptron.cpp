@@ -237,9 +237,9 @@ void zero_W(double* W, int K) {
 	mult_scalar_with_vector(W, K + 1, 0, W);
 }
 void run_perceptron_sequential(const char* output_path, int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, Point* points) {
-	double *W, *temp_result, alpha, current_q = MAX_QC;
+	double *W, *temp_result, alpha, current_q = MAX_QC,t1,t2;
 	int fault_flag = FAULT;
-
+	t1 = omp_get_wtime();
 	init_W(&temp_result, K);
 	if (!init_W(&W, K))
 	{
@@ -261,11 +261,12 @@ void run_perceptron_sequential(const char* output_path, int N, int K, double alp
 		if (current_q <= QC)
 			break;
 	}
-	print_perceptron_output(output_path, W, K, alpha, current_q, QC);
+	t2 = omp_get_wtime();
+	print_perceptron_output(output_path, W, K, alpha, current_q, QC,t2-t1);
 	free(W);
 	free(temp_result);
 }
-void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC) {
+void print_perceptron_output(const char* path, double* W, int K, double alpha, double q, double QC, double time) {
 
 
 	FILE* file = NULL;
@@ -275,6 +276,7 @@ void print_perceptron_output(const char* path, double* W, int K, double alpha, d
 	{
 		printf("Alpha is not found\n");
 		fprintf(file, "Alpha is not found");
+		
 	}
 	else
 	{
@@ -284,7 +286,10 @@ void print_perceptron_output(const char* path, double* W, int K, double alpha, d
 		for (int i = 0; i <= K; i++)
 			fprintf(file, "%f\n", W[i]);
 	}
-
+	fprintf(file, "\nTime = %f\n", time);
+#ifdef _DEBUG
+	printf("DEBUG : \nTime = %f\n", time);
+#endif
 	fclose(file);
 }
 
@@ -296,9 +301,7 @@ void free_alpha_array() {
 }
 void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 	alpha_array_size = (int)floor(alpha_max / alpha_zero);
-
 	alpha_array = (Alpha*)malloc(sizeof(Alpha)*	alpha_array_size);
-
 #pragma omp parallel for
 	for (int i = 0; i < alpha_array_size; i++)
 	{
@@ -306,31 +309,29 @@ void init_alpha_array(double alpha_max, double alpha_zero, int dim) {
 		alpha_array[i].W = (double*)malloc(sizeof(double)*dim);
 		alpha_array[i].value = (i + 1)*alpha_zero;
 	}
-
 }
 void send_first_alphas_to_world(double alpha_max, double alpha_zero, double& alpha, int world_size, int& num_workers, MPI_Comm comm)
 {
 	//Send first alpha values to hosts
 #pragma omp parallel for
-	for (int dst = 1; dst < world_size; dst++)
+	for (int dst = 1; dst < world_size; ++dst)
 	{
 		if (alpha <= alpha_max) {
 			MPI_Send(&alpha, 1, MPI_DOUBLE, dst, START_TASK_TAG, comm);
 #pragma omp critical
 			{
-				num_workers++;
+				++num_workers;
 				alpha += alpha_zero;
 			}
 		}
-
 	}
 }
 void send_finish_tag_to_world(int world_size, MPI_Comm comm)
 {
-	double a;
+	double junk_val;
 #pragma omp parallel for
 	for (int dst = 1; dst < world_size; dst++)
-		MPI_Send(&a, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
+		MPI_Send(&junk_val, 1, MPI_DOUBLE, dst, FINISH_PROCESS_TAG, comm);
 }
 void pack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size, MPI_Comm comm)
 {
@@ -350,17 +351,19 @@ void unpack_buffer(char* buffer, double& alpha, double& q, double* W, int W_size
 void sendNextAlpha(double& alpha, double alpha_max, double alpha_zero, int dest, int& num_workers, MPI_Comm comm)
 {
 	MPI_Send(&alpha, 1, MPI_DOUBLE, dest, START_TASK_TAG, comm);
-	num_workers++;
-	alpha += alpha_zero;
+		++num_workers;
+		alpha += alpha_zero;
 }
-int send_alpha_to_second_process(omp_lock_t& lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, double& alpha_zero, double* W, int K)
+int send_alpha_to_second_process(omp_lock_t& lock, omp_lock_t& var_lock, int& PROCESS_2_STATUS_SHARED, double& alpha_2, double& alpha, double& alpha_zero, double* W, int K)
 {
 	int status;
 	omp_set_lock(&lock);
 	if ((status = PROCESS_2_STATUS_SHARED) == PROCESS_WAITING)
 	{
+		omp_set_lock(&var_lock);
 		alpha_2 = alpha;
 		zero_W(W, K);
+		omp_unset_lock(&var_lock);
 		status = PROCESS_2_STATUS_SHARED = PROCESS_BUSY;
 		alpha += alpha_zero;
 	}
@@ -376,10 +379,11 @@ int get_value_thread_safe(omp_lock_t& lock, int& var)
 	omp_unset_lock(&lock);
 	return val;
 }
+
 void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_max, int LIMIT, double QC, MPI_Comm comm, int world_size, char* buffer, const char* output_path, Point* points, Point* points_device)
 {
 	MPI_Status status;
-	double alpha, alpha_2, q_2, returned_alpha, returned_q, *W, *W_2, *temp_result, t1, t2;
+	double alpha, alpha_2, q_2, returned_alpha, returned_q, *W, *W_2, *temp_result, t1, t2,t3,t4;
 	int num_workers = 0, alpha_found_state = ALPHA_NOT_FOUND, data_src, RECEIVED_SOLUTION_FLAG = NO_SOLUTION;
 	init_W(&W, K);
 	init_W(&W_2, K);
@@ -397,15 +401,12 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 	1. for dynamic scheduling for alphas
 	2. Calculating for received alpha - helping with the load
 	*/
-#pragma omp parallel num_threads(2) shared(lock,var_lock,PROCESS_2_STATUS_SHARED, q_2,alpha_2,W_2) private(PROCESS_2_STATUS_PRIVATE,returned_q,returned_alpha)
+#pragma omp parallel num_threads(2) shared(lock,var_lock,PROCESS_2_STATUS_SHARED, q_2,alpha_2,W_2) private(PROCESS_2_STATUS_PRIVATE,t3,t4)
 	{
 		if (omp_get_thread_num() == 0)
 		{
-
 			send_first_alphas_to_world(alpha_max, alpha_zero, alpha, world_size, num_workers, comm);
-			PROCESS_2_STATUS_PRIVATE = send_alpha_to_second_process(lock, PROCESS_2_STATUS_SHARED, alpha_2, alpha, alpha_zero, W_2, K);
-
-
+			PROCESS_2_STATUS_PRIVATE = send_alpha_to_second_process(lock,var_lock, PROCESS_2_STATUS_SHARED, alpha_2, alpha, alpha_zero, W_2, K);
 			//send new alphas to hosts that finish
 			while (num_workers > 0 || PROCESS_2_STATUS_PRIVATE == PROCESS_BUSY)
 			{
@@ -413,17 +414,20 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 				if (PROCESS_2_STATUS_PRIVATE == PROCESS_HAS_SOLUTION)
 				{
 					//Receive solution from other process
+					t3 = omp_get_wtime();
 					omp_set_lock(&var_lock);
 					returned_alpha = alpha_2;
 					returned_q = q_2;
 					copy_vector(W, W_2, K + 1);
 					omp_unset_lock(&var_lock);
-
+					
 					omp_set_lock(&lock);
 					PROCESS_2_STATUS_PRIVATE = PROCESS_2_STATUS_SHARED = PROCESS_WAITING;
 					omp_unset_lock(&lock);
 					data_src = MASTER;
 					RECEIVED_SOLUTION_FLAG = 1;
+					t4 = omp_get_wtime();
+					printf("time to receive locks and get vars from process 2 is %f\n", t4 - t3);
 				}
 				else if (num_workers > 0)
 				{
@@ -438,37 +442,38 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 
 				if (alpha_found_state != ALPHA_FOUND && RECEIVED_SOLUTION_FLAG == HAVE_SOLUTION)
 				{
+					t3 = omp_get_wtime();
 					alpha_found_state = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
+					t4 = omp_get_wtime();
+					printf("time to check lowest alpha %f\n", t4 - t3);
 					if (alpha_found_state == ALPHA_FOUND)
 					{
 						// not doing break, need to wait for hosts to send their calculations.
 						t2 = omp_get_wtime();
-						print_perceptron_output(output_path, W, K, returned_alpha, returned_q, QC);
+						print_perceptron_output(output_path, W, K, returned_alpha, returned_q, QC,t2-t1);
 					}
-
-					//reset flag
-					RECEIVED_SOLUTION_FLAG = NO_SOLUTION;
 				}
 				//send new alpha
-				if (alpha_found_state == ALPHA_NOT_FOUND && alpha <= alpha_max) {
+				if (alpha_found_state == ALPHA_NOT_FOUND && alpha <= alpha_max && RECEIVED_SOLUTION_FLAG== HAVE_SOLUTION) {
 					if (data_src == MASTER)
-						send_alpha_to_second_process(lock, PROCESS_2_STATUS_SHARED, alpha_2, alpha, alpha_zero, W_2, K);
+						send_alpha_to_second_process(lock,var_lock, PROCESS_2_STATUS_SHARED, alpha_2, alpha, alpha_zero, W_2, K);
 					else if (world_size > 1)
 						sendNextAlpha(alpha, alpha_max, alpha_zero, status.MPI_SOURCE, num_workers, comm);
 				}
-
+				//reset flag
+				RECEIVED_SOLUTION_FLAG = NO_SOLUTION;
 			}
 			if (alpha_found_state != ALPHA_FOUND)
 			{
 				t2 = omp_get_wtime();
-				print_perceptron_output(output_path, W, K, returned_alpha, returned_q, QC);
+				print_perceptron_output(output_path, W, K, returned_alpha, returned_q, QC,t2-t1);
 			}
 			//send hosts the finish tag
+			printf("\nTotal parallel time - %f seconds \n", t2 - t1);
 			send_finish_tag_to_world(world_size, comm);
 			omp_set_lock(&lock);
 			PROCESS_2_STATUS_SHARED = FINISH_PROCESS;
 			omp_unset_lock(&lock);
-			printf("\nTotal parallel time - %f seconds \n", t2 - t1);
 		}
 		else // PROCESS 2, aid with alpha
 		{
@@ -479,10 +484,13 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 				set_solution = 0;
 				if (PROCESS_2_STATUS_PRIVATE == PROCESS_BUSY)
 				{
+					t3 = omp_get_wtime();
 					omp_set_lock(&var_lock);
 					check_points_and_adjustW(points, W_2, temp_result, N, K, LIMIT, alpha_2);
 					get_quality_with_GPU(points_device, W_2, N, K, &q_2);
+					t4 = omp_get_wtime();
 					omp_unset_lock(&var_lock);
+					printf("process 2 receive alpha %f, return q %f and w0 %f w1 %f w2 %f - time %f\n", alpha_2, q_2, W_2[0], W_2[1], W_2[2],t4-t3);
 					omp_set_lock(&lock);
 					PROCESS_2_STATUS_PRIVATE = PROCESS_2_STATUS_SHARED = PROCESS_HAS_SOLUTION;
 					set_solution = 1;
@@ -490,15 +498,17 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 				}
 				if (!set_solution)
 					PROCESS_2_STATUS_PRIVATE = get_value_thread_safe(lock, PROCESS_2_STATUS_SHARED);
-			}
+			} //end while
 			cuda_malloc_and_free_pointers_from_quality_function(0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
-		}
-	}
+		} //end process 2 procedure
+	} // end pragma omp
+
 	free_alpha_array();
 	free(W);
 	free(W_2);
 	free(temp_result);
 	omp_destroy_lock(&lock);
+	omp_destroy_lock(&var_lock);
 }
 
 
@@ -517,7 +527,7 @@ void run_perceptron_parallel(const char* output_path, int rank, int world_size, 
 	}
 }
 void get_alphas_and_calc_q(int rank, char* buffer, int N, int K, int LIMIT, Point* points, Point* points_device, MPI_Comm comm) {
-	double alpha, q, *W, *temp_result;
+	double alpha, q, *W, *temp_result,t1,t2,t3;
 	MPI_Status status;
 	init_W(&W, K);
 	init_W(&temp_result, K);
@@ -527,8 +537,12 @@ void get_alphas_and_calc_q(int rank, char* buffer, int N, int K, int LIMIT, Poin
 		if (status.MPI_TAG == FINISH_PROCESS_TAG)
 			break;
 		zero_W(W, K);
+		t1 = omp_get_wtime();
 		check_points_and_adjustW(points, W, temp_result, N, K, LIMIT, alpha);
+		t2 = omp_get_wtime();
 		get_quality_with_GPU(points_device, W, N, K, &q);
+		t3 = omp_get_wtime();
+		printf("Rank %d - receive alpha %f return q %f w0 %f w1 %f w2 %f time - %f (adjusting w %f, getting q %f)\n", rank, alpha, q,W[0],W[1],W[2],t3-t1,t2-t1,t3-t2);
 		pack_buffer(buffer, alpha, q, W, K + 1, comm);
 		MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 	}
@@ -572,6 +586,7 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 	{
 		if (alpha_array[i].q == Q_NOT_CHECKED)
 		{
+			printf("alpha %f checked, q is %f - invalid\n",alpha_array[i].value, alpha_array[i].q);
 			return alpha_array_state;
 		}
 

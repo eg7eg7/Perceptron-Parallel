@@ -1,9 +1,9 @@
 ﻿  
-  C:\Users\afeka\Documents\GitHub\into\Parallel-Binary-Classification-Perceptron\parallel\Parallel_Perceptron>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\bin\nvcc.exe" -ccbin "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\x86_amd64" -x cu  -I"C:\Program Files\MPICH2\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\include"  -G   --keep-dir x64\Debug -maxrregcount=0  --machine 64 --compile   -g   -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -o x64\Debug\kernel.cu.obj "C:\Users\afeka\Documents\GitHub\into\Parallel-Binary-Classification-Perceptron\parallel\Parallel_Perceptron\kernel.cu" -clean 
+  C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\Parallel_Perceptron>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\bin\nvcc.exe" -ccbin "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\x86_amd64" -x cu  -I"C:\Program Files\MPICH2\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\include"  -G   --keep-dir x64\Debug -maxrregcount=0  --machine 64 --compile   -g   -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -o x64\Debug\kernel.cu.obj "C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\Parallel_Perceptron\kernel.cu" -clean 
   kernel.cu
   Compiling CUDA source file kernel.cu...
   
-  C:\Users\afeka\Documents\GitHub\into\Parallel-Binary-Classification-Perceptron\parallel\Parallel_Perceptron>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\bin\nvcc.exe" -gencode=arch=compute_30,code=\"sm_30,compute_30\" --use-local-env --cl-version 2015 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\x86_amd64" -x cu  -I"C:\Program Files\MPICH2\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\include"  -G   --keep-dir x64\Debug -maxrregcount=0  --machine 64 --compile -cudart static  -g   -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -o x64\Debug\kernel.cu.obj "C:\Users\afeka\Documents\GitHub\into\Parallel-Binary-Classification-Perceptron\parallel\Parallel_Perceptron\kernel.cu" 
+  C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\Parallel_Perceptron>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\bin\nvcc.exe" -gencode=arch=compute_30,code=\"sm_30,compute_30\" --use-local-env --cl-version 2015 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\x86_amd64" -x cu  -I"C:\Program Files\MPICH2\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\include"  -G   --keep-dir x64\Debug -maxrregcount=0  --machine 64 --compile -cudart static  -g   -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -o x64\Debug\kernel.cu.obj "C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\Parallel_Perceptron\kernel.cu" 
 c:\program files\mpich2\include\mpicxx.h(409): warning : expression has no effect
 c:\program files\mpich2\include\mpicxx.h(409): warning : expression has no effect
 c:\program files\mpich2\include\mpicxx.h(409): warning : expression has no effect
@@ -79,13 +79,13 @@ c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effe
   kernel.cu
   vectors.cpp
   Perceptron.cpp
-c:\users\afeka\documents\github\into\parallel-binary-classification-perceptron\parallel\parallel_perceptron\perceptron.cpp(382): warning C4101: 'returned_alpha': unreferenced local variable
-c:\users\afeka\documents\github\into\parallel-binary-classification-perceptron\parallel\parallel_perceptron\perceptron.cpp(382): warning C4101: 'returned_q': unreferenced local variable
+c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\parallel_perceptron\perceptron.cpp(384): warning C4101: 't4': unreferenced local variable
+c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\parallel_perceptron\perceptron.cpp(384): warning C4101: 't3': unreferenced local variable
   main.cpp
   Generating Code...
-  Parallel_Perceptron.vcxproj -> C:\Users\afeka\Documents\GitHub\into\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug\Parallel_Perceptron.exe
-  Parallel_Perceptron.vcxproj -> C:\Users\afeka\Documents\GitHub\into\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug\Parallel_Perceptron.pdb (Full PDB)
-  copy "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\bin\cudart*.dll" "C:\Users\afeka\Documents\GitHub\into\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug\"
+  Parallel_Perceptron.vcxproj -> C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug\Parallel_Perceptron.exe
+  Parallel_Perceptron.vcxproj -> C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug\Parallel_Perceptron.pdb (Full PDB)
+  copy "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\bin\cudart*.dll" "C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug\"
   C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\bin\cudart32_91.dll
   C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.1\bin\cudart64_91.dll
           2 file(s) copied.
