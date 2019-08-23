@@ -568,20 +568,19 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 	copy_vector(alpha_array[index].W, W, dim);
 
 	//order really matters! - no omp
-	for (int i = min_index; i < alpha_array_size; i++)
+	for (int i = min_index; i < alpha_array_size; ++i)
 	{
-		if (alpha_array[index].q == Q_NOT_CHECKED)
+		if (alpha_array[i].q == Q_NOT_CHECKED)
 		{
-			printf("%f not checked - return %d\n", alpha_array[index].q, alpha_array_state);
 			return alpha_array_state;
 		}
 
-		if (alpha_array[index].q <= QC)
+		if (alpha_array[i].q <= QC)
 		{
 
-			*returned_alpha = alpha_array[index].value;
-			*returned_q = alpha_array[index].q;
-			copy_vector(W, alpha_array[index].W, dim);
+			*returned_alpha = alpha_array[i].value;
+			*returned_q = alpha_array[i].q;
+			copy_vector(W, alpha_array[i].W, dim);
 			alpha_array_state = ALPHA_FOUND;
 			return alpha_array_state;
 		}
