@@ -79,8 +79,8 @@ c:\program files\mpich2\include\mpicxx.h(1906): warning : expression has no effe
   kernel.cu
   vectors.cpp
   Perceptron.cpp
-c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\parallel_perceptron\perceptron.cpp(384): warning C4101: 't4': unreferenced local variable
-c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\parallel_perceptron\perceptron.cpp(384): warning C4101: 't3': unreferenced local variable
+c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\parallel_perceptron\perceptron.cpp(386): warning C4101: 't4': unreferenced local variable
+c:\users\cudauser\documents\github\parallel-binary-classification-perceptron\parallel\parallel_perceptron\perceptron.cpp(386): warning C4101: 't3': unreferenced local variable
   main.cpp
   Generating Code...
   Parallel_Perceptron.vcxproj -> C:\Users\cudauser\Documents\GitHub\Parallel-Binary-Classification-Perceptron\parallel\x64\Debug\Parallel_Perceptron.exe

@@ -286,9 +286,9 @@ void print_perceptron_output(const char* path, double* W, int K, double alpha, d
 		for (int i = 0; i <= K; i++)
 			fprintf(file, "%f\n", W[i]);
 	}
-	fprintf(file, "\nTime = %f\n", time);
-#ifdef _DEBUG
-	printf("DEBUG : \nTime = %f\n", time);
+#ifdef _DEBUG_PRINTS
+	fprintf(file, "DEBUG : Time = %f\n", time);
+	printf("DEBUG : Time = %f\n", time);
 #endif
 	fclose(file);
 }
@@ -358,13 +358,13 @@ int send_alpha_to_second_process(omp_lock_t& lock, omp_lock_t& var_lock, int& PR
 {
 	int status;
 	omp_set_lock(&lock);
-	if ((status = PROCESS_2_STATUS_SHARED) == PROCESS_WAITING)
+	if ((status = PROCESS_2_STATUS_SHARED) == CORE_WAITING)
 	{
 		omp_set_lock(&var_lock);
 		alpha_2 = alpha;
 		zero_W(W, K);
 		omp_unset_lock(&var_lock);
-		status = PROCESS_2_STATUS_SHARED = PROCESS_BUSY;
+		status = PROCESS_2_STATUS_SHARED = CORE_BUSY;
 		alpha += alpha_zero;
 	}
 	omp_unset_lock(&lock);
@@ -390,8 +390,8 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 	init_W(&temp_result, K);
 	init_alpha_array(alpha_max, alpha_zero, K + 1);
 	alpha = alpha_zero;
-	int PROCESS_2_STATUS_SHARED = PROCESS_WAITING;
-	int PROCESS_2_STATUS_PRIVATE = PROCESS_WAITING;
+	int CORE_2_STATUS_SHARED = CORE_WAITING;
+	int CORE_2_STATUS_PRIVATE = CORE_WAITING;
 	omp_lock_t lock;
 	omp_lock_t var_lock;
 	omp_init_lock(&var_lock);
@@ -401,17 +401,17 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 	1. for dynamic scheduling for alphas
 	2. Calculating for received alpha - helping with the load
 	*/
-#pragma omp parallel num_threads(2) shared(lock,var_lock,PROCESS_2_STATUS_SHARED, q_2,alpha_2,W_2) private(PROCESS_2_STATUS_PRIVATE,t3,t4)
+#pragma omp parallel num_threads(2) shared(lock,var_lock,CORE_2_STATUS_SHARED, q_2,alpha_2,W_2) private(CORE_2_STATUS_PRIVATE,t3,t4)
 	{
 		if (omp_get_thread_num() == 0)
 		{
 			send_first_alphas_to_world(alpha_max, alpha_zero, alpha, world_size, num_workers, comm);
-			PROCESS_2_STATUS_PRIVATE = send_alpha_to_second_process(lock,var_lock, PROCESS_2_STATUS_SHARED, alpha_2, alpha, alpha_zero, W_2, K);
+			CORE_2_STATUS_PRIVATE = send_alpha_to_second_process(lock,var_lock, CORE_2_STATUS_SHARED, alpha_2, alpha, alpha_zero, W_2, K);
 			//send new alphas to hosts that finish
-			while (num_workers > 0 || PROCESS_2_STATUS_PRIVATE == PROCESS_BUSY)
+			while (num_workers > 0 || CORE_2_STATUS_PRIVATE == CORE_BUSY)
 			{
-				PROCESS_2_STATUS_PRIVATE = get_value_thread_safe(lock, PROCESS_2_STATUS_SHARED);
-				if (PROCESS_2_STATUS_PRIVATE == PROCESS_HAS_SOLUTION)
+				CORE_2_STATUS_PRIVATE = get_value_thread_safe(lock, CORE_2_STATUS_SHARED);
+				if (CORE_2_STATUS_PRIVATE == CORE_HAS_SOLUTION)
 				{
 					//Receive solution from other process
 					t3 = omp_get_wtime();
@@ -422,12 +422,14 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 					omp_unset_lock(&var_lock);
 					
 					omp_set_lock(&lock);
-					PROCESS_2_STATUS_PRIVATE = PROCESS_2_STATUS_SHARED = PROCESS_WAITING;
+					CORE_2_STATUS_PRIVATE = CORE_2_STATUS_SHARED = CORE_WAITING;
 					omp_unset_lock(&lock);
 					data_src = MASTER;
 					RECEIVED_SOLUTION_FLAG = 1;
 					t4 = omp_get_wtime();
+#ifdef _DEBUG_PRINTS
 					printf("time to receive locks and get vars from process 2 is %f\n", t4 - t3);
+#endif
 				}
 				else if (num_workers > 0)
 				{
@@ -445,7 +447,9 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 					t3 = omp_get_wtime();
 					alpha_found_state = check_lowest_alpha(&returned_alpha, &returned_q, QC, W, K + 1);
 					t4 = omp_get_wtime();
+#ifdef _DEBUG_PRINTS
 					printf("time to check lowest alpha %f\n", t4 - t3);
+#endif
 					if (alpha_found_state == ALPHA_FOUND)
 					{
 						// not doing break, need to wait for hosts to send their calculations.
@@ -456,7 +460,7 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 				//send new alpha
 				if (alpha_found_state == ALPHA_NOT_FOUND && alpha <= alpha_max && RECEIVED_SOLUTION_FLAG== HAVE_SOLUTION) {
 					if (data_src == MASTER)
-						send_alpha_to_second_process(lock,var_lock, PROCESS_2_STATUS_SHARED, alpha_2, alpha, alpha_zero, W_2, K);
+						send_alpha_to_second_process(lock,var_lock, CORE_2_STATUS_SHARED, alpha_2, alpha, alpha_zero, W_2, K);
 					else if (world_size > 1)
 						sendNextAlpha(alpha, alpha_max, alpha_zero, status.MPI_SOURCE, num_workers, comm);
 				}
@@ -472,17 +476,17 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 			printf("\nTotal parallel time - %f seconds \n", t2 - t1);
 			send_finish_tag_to_world(world_size, comm);
 			omp_set_lock(&lock);
-			PROCESS_2_STATUS_SHARED = FINISH_PROCESS;
+			CORE_2_STATUS_SHARED = FINISH_CORE;
 			omp_unset_lock(&lock);
 		}
-		else // PROCESS 2, aid with alpha
+		else // CORE 2, aid with alpha
 		{
 			int set_solution;
-			PROCESS_2_STATUS_PRIVATE = get_value_thread_safe(lock, PROCESS_2_STATUS_SHARED);
-			while (PROCESS_2_STATUS_PRIVATE != FINISH_PROCESS)
+			CORE_2_STATUS_PRIVATE = get_value_thread_safe(lock, CORE_2_STATUS_SHARED);
+			while (CORE_2_STATUS_PRIVATE != FINISH_CORE)
 			{
 				set_solution = 0;
-				if (PROCESS_2_STATUS_PRIVATE == PROCESS_BUSY)
+				if (CORE_2_STATUS_PRIVATE == CORE_BUSY)
 				{
 					t3 = omp_get_wtime();
 					omp_set_lock(&var_lock);
@@ -490,14 +494,16 @@ void master_dynamic_alpha_sending(int N, int K, double alpha_zero, double alpha_
 					get_quality_with_GPU(points_device, W_2, N, K, &q_2);
 					t4 = omp_get_wtime();
 					omp_unset_lock(&var_lock);
-					printf("process 2 receive alpha %f, return q %f and w0 %f w1 %f w2 %f - time %f\n", alpha_2, q_2, W_2[0], W_2[1], W_2[2],t4-t3);
+#ifdef _DEBUG_PRINTS
+					printf("core 2 receive alpha %f, return q %f and w0 %f w1 %f w2 %f - time %f\n", alpha_2, q_2, W_2[0], W_2[1], W_2[2],t4-t3);
+#endif
 					omp_set_lock(&lock);
-					PROCESS_2_STATUS_PRIVATE = PROCESS_2_STATUS_SHARED = PROCESS_HAS_SOLUTION;
+					CORE_2_STATUS_PRIVATE = CORE_2_STATUS_SHARED = CORE_HAS_SOLUTION;
 					set_solution = 1;
 					omp_unset_lock(&lock);
 				}
 				if (!set_solution)
-					PROCESS_2_STATUS_PRIVATE = get_value_thread_safe(lock, PROCESS_2_STATUS_SHARED);
+					CORE_2_STATUS_PRIVATE = get_value_thread_safe(lock, CORE_2_STATUS_SHARED);
 			} //end while
 			cuda_malloc_and_free_pointers_from_quality_function(0, 0, 0, 0, 0, 0, FREE_MALLOC_FLAG);
 		} //end process 2 procedure
@@ -542,7 +548,9 @@ void get_alphas_and_calc_q(int rank, char* buffer, int N, int K, int LIMIT, Poin
 		t2 = omp_get_wtime();
 		get_quality_with_GPU(points_device, W, N, K, &q);
 		t3 = omp_get_wtime();
+#ifdef _DEBUG_PRINTS
 		printf("Rank %d - receive alpha %f return q %f w0 %f w1 %f w2 %f time - %f (adjusting w %f, getting q %f)\n", rank, alpha, q,W[0],W[1],W[2],t3-t1,t2-t1,t3-t2);
+#endif
 		pack_buffer(buffer, alpha, q, W, K + 1, comm);
 		MPI_Send(buffer, BUFFER_SIZE, MPI_PACKED, MASTER, FINISH_TASK_TAG, comm);
 	}
@@ -586,7 +594,9 @@ int check_lowest_alpha(double* returned_alpha, double* returned_q, double QC, do
 	{
 		if (alpha_array[i].q == Q_NOT_CHECKED)
 		{
+#ifdef _DEBUG_PRINTS
 			printf("alpha %f checked, q is %f - invalid\n",alpha_array[i].value, alpha_array[i].q);
+#endif
 			return alpha_array_state;
 		}
 

@@ -10,6 +10,9 @@
 #include <string.h>
 #include <math.h>
 #include <mpi.h>
+
+//#define _DEBUG_PRINTS //defining _DEBUG will add prints to console
+
 /* Point belongs to either set a or set b*/
 #define SET_A 1
 #define SET_B -1
@@ -48,10 +51,10 @@
 
 
 /* States for second process in master host */
-#define PROCESS_WAITING 0
-#define PROCESS_HAS_SOLUTION 1
-#define PROCESS_BUSY 2
-#define FINISH_PROCESS 3
+#define CORE_WAITING 0
+#define CORE_HAS_SOLUTION 1
+#define CORE_BUSY 2
+#define FINISH_CORE 3
 
 /* States for flags in master host*/
 #define NO_SOLUTION 0
