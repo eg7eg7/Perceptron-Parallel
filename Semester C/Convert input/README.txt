@@ -1,0 +1,1 @@
+converts input from semester B to that which fits the semester C version
